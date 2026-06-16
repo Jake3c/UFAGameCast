@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import HomeFieldLogo from '../resources/logo-team-MAD.png'
 
 interface FieldVisualizationProps {
   discPosition?: { x: number; y: number };
@@ -43,7 +44,18 @@ export const FieldVisualization: React.FC<FieldVisualizationProps> = ({
         <rect x="0" y="0" width={endzoneDepth} height={fieldHeight} fill="rgba(255, 255, 255, 0.05)" />
         <rect x={fieldWidth - endzoneDepth} y="0" width={endzoneDepth} height={fieldHeight} fill="rgba(255, 255, 255, 0.05)" />
 
-        {/* Disc - only one instance on field */}
+        {/* Home field logo */}
+        <image
+            href={HomeFieldLogo}
+            x={fieldWidth / 2 - 20}
+            y={fieldHeight / 2 - 20}
+            width="40"
+            height="40"
+            opacity="0.40"
+            preserveAspectRatio="xMidYMid meet"
+        />
+
+        {/* Disc */}
         {discPosition && <DiscMarker position={discPosition} />}
       </svg>
     </div>
@@ -58,7 +70,7 @@ interface DiscMarkerProps {
  * Single disc marker with animation
  */
 const DiscMarker: React.FC<DiscMarkerProps> = ({ position }) => {
-  const discRadius = 0.8;
+  const discRadius = 1.6;
 
   return (
     <motion.g
@@ -71,7 +83,7 @@ const DiscMarker: React.FC<DiscMarkerProps> = ({ position }) => {
         cx={0}
         cy={0}
         r={discRadius}
-        fill="#FFD700"
+        fill="#ffffff"
         opacity="0.95"
         filter="drop-shadow(0 0 0.5px rgba(0, 0, 0, 0.3))"
       />
@@ -82,8 +94,8 @@ const DiscMarker: React.FC<DiscMarkerProps> = ({ position }) => {
         cy={0}
         r={discRadius}
         fill="none"
-        stroke="#FFA500"
-        strokeWidth="0.1"
+        stroke="#c7c6bf"
+        strokeWidth="0.5"
       />
 
       <title>Disc</title>
