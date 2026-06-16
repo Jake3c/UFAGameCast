@@ -1,0 +1,30 @@
+# C# / .NET
+bin/
+obj/
+*.dll
+*.exe
+*.pdb
+.vs/
+.vscode/
+*.csproj.user
+*.sln.docstates
+*.suo
+
+# Environment variables
+.env
+.env.local
+appsettings.local.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea
+*.swp
+*.swo
+*~
+
+# Build outputs
+publish/
+release/
