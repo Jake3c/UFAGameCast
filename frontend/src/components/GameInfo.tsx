@@ -1,6 +1,7 @@
 import React from 'react';
 import { GameState } from '../types/api';
-import './GameInfo.css';
+import LogoTeamMAD from '../resources/logo-team-MAD.png'
+import LogoTeamIND from '../resources/logo-team-IND.png'
 
 interface GameInfoProps {
   gameState: GameState | null;
@@ -13,37 +14,47 @@ interface GameInfoProps {
  */
 export const GameInfo: React.FC<GameInfoProps> = ({ gameState, isConnected, error }) => {
   return (
-    <div className="game-info-container">
-      <div className="status-bar">
-        <div className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
-          <div className="status-indicator"></div>
-          <span>{isConnected ? 'Live' : 'Offline'}</span>
+    <div>
+      <div className="flex justify-between items-center pb-4">
+        <div className="px-2 bg-[radial-gradient(circle_at_top_left,var(--team-color),white_60%)]" style={{ "--team-color": "#27A332" } as React.CSSProperties}>
+          <div className="w-16 h-16 flex items-center justify-center">
+            <img src={LogoTeamIND} alt="IND" className="max-w-full max-h-full" />
+          </div>
+          <div className="font-semibold text-gray-700">
+            {gameState ? gameState.team1Name : "IND"}
+          </div>
+          <div className="text-gray-400 text-xs">
+            (1-4)
+          </div>
         </div>
-        {error && <div className="error-message">{error}</div>}
+
+        <div className='w-full px-2 flex justify-between'>
+          <div className="text-3xl font-bold">
+            {gameState ? gameState.team1Score : "0"}
+          </div>
+          <div className="flex-grow">
+            <div className="text-center">
+              <div className="text-lg font-bold">{gameState ? "11:03" : "00:00"}</div>
+              <div className="text-sm text-gray-400 font-semibold">Q3</div>
+            </div>
+          </div>
+          <div className="text-3xl font-bold">
+            {gameState ? gameState.team2Score : "0"}
+          </div>
+        </div>
+
+        <div className="text-right px-2 bg-[radial-gradient(circle_at_top_right,var(--team-color),white_60%)]" style={{ "--team-color": "#cbb82e"  } as React.CSSProperties}>
+          <div className="w-16 h-16 flex items-center justify-center">
+            <img src={LogoTeamMAD} alt="MAD" className="max-w-full max-h-full" />
+          </div>
+          <div className="font-semibold text-gray-700">
+            {gameState ? gameState.team2Name : "MAD"}
+          </div>
+          <div className="text-gray-400 text-xs">
+            (3-2)
+          </div>
+        </div>
       </div>
-
-      {gameState && (
-        <div className="scoreboard">
-          <div className="team-score">
-            <h3 className="team-name">{gameState.team1Name}</h3>
-            <div className="score">{gameState.team1Score}</div>
-          </div>
-
-          <div className="vs">VS</div>
-
-          <div className="team-score">
-            <h3 className="team-name">{gameState.team2Name}</h3>
-            <div className="score">{gameState.team2Score}</div>
-          </div>
-        </div>
-      )}
-
-      {gameState?.lastPlayEvent && (
-        <div className="last-play">
-          <p className="last-play-label">Last Play:</p>
-          <p className="last-play-description">{gameState.lastPlayEvent.description}</p>
-        </div>
-      )}
     </div>
   );
 };

@@ -1,5 +1,4 @@
 using UFAGameCast.Backend.Services;
-using UFAGameCast.Backend.Models;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -23,7 +22,6 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
     });
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
 
 // Add backend game state and UFA polling service
 builder.Services.AddSingleton<GameStateService>();
@@ -37,8 +35,6 @@ app.UseCors("AllowFrontend");
 
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
 }
 
 app.UseHttpsRedirection();

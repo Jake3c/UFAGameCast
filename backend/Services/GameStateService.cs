@@ -60,10 +60,10 @@ public class GameStateService
         {
             GameId = 1,
             CurrentTime = DateTime.UtcNow,
-            Team1Name = "Hawks",
-            Team2Name = "Eagles",
-            Team1Score = 0,
-            Team2Score = 0,
+            Team1Name = "Alleycats",
+            Team2Name = "Radicals",
+            Team1Score = 18,
+            Team2Score = 19,
             AllPlayers = players,
             DiscPosition = new FieldPosition { X = 60, Y = 26.5f } // Center field
         };

@@ -1,7 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PlayEvent } from '../types/api';
-import './PlayHistory.css';
 
 interface PlayHistoryProps {
   plays: PlayEvent[];
