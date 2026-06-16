@@ -60,7 +60,7 @@ public class GameSimulationService : BackgroundService
         _logger.LogInformation("Game Simulation Service stopped");
     }
 
-    private PlayEvent GenerateRandomPlayEvent(GameState gameState)
+    private GameEventViewModel GenerateRandomPlayEvent(GameState gameState)
     {
         var players = gameState.AllPlayers.ToList();
         var initiator = players[_random.Next(players.Count)];
@@ -99,7 +99,7 @@ public class GameSimulationService : BackgroundService
         // Persist the updated game state
         _gameStateService.UpdateGameState(gameState);
 
-        return new PlayEvent
+        return new GameEventViewModel
         {
             EventType = eventType,
             InitiatorPlayerId = initiator.PlayerId,
@@ -107,8 +107,7 @@ public class GameSimulationService : BackgroundService
             ReceiverPlayerId = receiver.PlayerId,
             ReceiverName = receiver.PlayerName,
             Distance = distance,
-            Description = description,
-            PlayersInvolved = new List<PlayerSnapshot> { initiator, receiver }
+            Description = description
         };
     }
 }

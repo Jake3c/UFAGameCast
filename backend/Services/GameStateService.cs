@@ -8,9 +8,9 @@ namespace UFAGameCast.Backend.Services;
 /// </summary>
 public class GameStateService
 {
-    private readonly ConcurrentQueue<PlayEvent> _playEventQueue = new();
+    private readonly ConcurrentQueue<GameEventViewModel> _gameEventQueue = new();
     private GameState _currentGameState;
-    private int _playEventId = 1;
+    private int _gameEventId = 1;
     private readonly object _lockObject = new();
 
     public GameStateService()
@@ -28,28 +28,28 @@ public class GameStateService
         }
     }
 
-    public void AddPlayEvent(PlayEvent playEvent)
+    public void AddPlayEvent(GameEventViewModel gameEvent)
     {
-        playEvent.Id = _playEventId++;
-        playEvent.Timestamp = DateTime.UtcNow;
-        _playEventQueue.Enqueue(playEvent);
+        gameEvent.Id = _gameEventId++;
+        gameEvent.Timestamp = DateTime.UtcNow;
+        _gameEventQueue.Enqueue(gameEvent);
 
         // Keep only the last 50 events in memory
-        while (_playEventQueue.Count > 50)
+        while (_gameEventQueue.Count > 50)
         {
-            _playEventQueue.TryDequeue(out _);
+            _gameEventQueue.TryDequeue(out _);
         }
 
         // Update the current game state with the latest event
         lock (_lockObject)
         {
-            _currentGameState.LastPlayEvent = playEvent;
+            _currentGameState.LastPlayEvent = gameEvent;
         }
     }
 
-    public IEnumerable<PlayEvent> GetRecentPlayEvents(int count = 10)
+    public IEnumerable<GameEventViewModel> GetRecentPlayEvents(int count = 10)
     {
-        return _playEventQueue.TakeLast(count).Reverse();
+        return _gameEventQueue.TakeLast(count).Reverse();
     }
 
     private GameState InitializeGameState()

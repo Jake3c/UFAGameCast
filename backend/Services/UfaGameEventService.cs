@@ -1,3 +1,4 @@
+using System.Diagnostics.Eventing.Reader;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -25,11 +26,10 @@ public class UfaGameEventService : BackgroundService
         _logger = logger;
         _httpClient = httpClientFactory.CreateClient();
         _baseUrl = configuration["UFA_API_BASE_URL"]?.TrimEnd('/') ?? "https://www.backend.ufastats.com/api/v1";
-        _gameId = configuration["UFA_GAME_ID"] ?? string.Empty;
+        _gameId = configuration["UFA_GAME_ID"] ?? "2026-06-14-IND-MAD"; //TODO: Fix hardcode here
         _jsonOptions = new JsonSerializerOptions
         {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
         };
     }
 
@@ -76,7 +76,8 @@ public class UfaGameEventService : BackgroundService
             return;
         }
 
-        var payload = await response.Content.ReadFromJsonAsync<UfaGameEventsResponse>(_jsonOptions, cancellationToken);
+        var content = await response.Content.ReadAsStringAsync();
+        var payload = await response.Content.ReadFromJsonAsync<GameEventsResponse>(_jsonOptions, cancellationToken);
         if (payload?.Data == null)
         {
             _logger.LogWarning("UFA game events response did not contain data");
@@ -86,7 +87,7 @@ public class UfaGameEventService : BackgroundService
         var mergedEvents = payload.Data.HomeEvents
             .Select((evt, index) => new { Source = "home", Event = evt, Index = index })
             .Concat(payload.Data.AwayEvents.Select((evt, index) => new { Source = "away", Event = evt, Index = index }))
-            .OrderBy(pair => pair.Event.Time ?? int.MaxValue)
+            .OrderBy(pair => pair.Event.Timestamp)
             .ThenBy(pair => pair.Index)
             .ToList();
 
@@ -118,11 +119,6 @@ public class UfaGameEventService : BackgroundService
                 DiscPosition = gameState.DiscPosition
             };
 
-            if (TryResolveDiscPosition(pair.Event, out var discPosition))
-            {
-                updatedState.DiscPosition = discPosition;
-            }
-
             _gameStateService.UpdateGameState(updatedState);
             _gameStateService.AddPlayEvent(playEvent);
 
@@ -130,7 +126,7 @@ public class UfaGameEventService : BackgroundService
         }
     }
 
-    private static string BuildSignature(string source, int index, UfaGameEvent evt)
+    private static string BuildSignature(string source, int index, GameEvent evt)
     {
         return string.Join('|',
             source,
@@ -144,9 +140,8 @@ public class UfaGameEventService : BackgroundService
             evt.TurnoverY?.ToString() ?? string.Empty);
     }
 
-    private static PlayEvent? CreatePlayEvent(UfaGameEvent evt)
+    private static GameEventViewModel? CreatePlayEvent(GameEvent evt)
     {
-        var eventType = MapEventType(evt.Type);
         var description = BuildDescription(evt);
 
         if (string.IsNullOrWhiteSpace(description))
@@ -154,45 +149,27 @@ public class UfaGameEventService : BackgroundService
             return null;
         }
 
-        return new PlayEvent
+        return new GameEventViewModel
         {
-            EventType = eventType,
+            EventType = evt.Type,
             InitiatorPlayerId = 0,
             InitiatorName = evt.Thrower ?? evt.Puller ?? evt.Defender ?? evt.Receiver ?? "Unknown",
             ReceiverPlayerId = 0,
             ReceiverName = evt.Receiver ?? evt.Defender ?? evt.Thrower,
             Distance = CalculateDistance(evt.ThrowerX, evt.ThrowerY, evt.ReceiverX, evt.ReceiverY),
-            Description = description,
-            PlayersInvolved = new List<PlayerSnapshot>()
+            Description = description
         };
     }
 
-    private static EventType MapEventType(int type) => type switch
-    {
-        18 => EventType.Pass,
-        19 => EventType.Goal,
-        20 => EventType.Drop,
-        22 => EventType.Turnover,
-        23 => EventType.Turnover,
-        11 => EventType.Turnover,
-        12 => EventType.Turnover,
-        13 => EventType.Turnover,
-        24 => EventType.Drop,
-        _ => EventType.Other,
-    };
-
-    private static string BuildDescription(UfaGameEvent evt)
+    private static string BuildDescription(GameEvent evt)
     {
         return evt.Type switch
         {
-            7 => $"Pull inbounds by {evt.Puller ?? "unknown player"}",
-            18 => $"Pass from {evt.Thrower ?? "unknown"} to {evt.Receiver ?? "unknown"}",
-            19 => $"Goal by {evt.Thrower ?? "unknown"} to {evt.Receiver ?? "unknown"}",
-            20 => $"Drop by {evt.Thrower ?? "unknown"}",
-            21 => $"Dropped pull by {evt.Receiver ?? "unknown"}",
-            22 => $"Throwaway by {evt.Thrower ?? "unknown"}",
-            23 => $"Callahan by {evt.Thrower ?? "unknown"}",
-            24 => $"Stall on {evt.Thrower ?? "unknown"}",
+            (EventType)7 => $"Pull inbounds by {evt.Puller ?? "unknown player"}",
+            (EventType)18 => $"Pass from {evt.Thrower ?? "unknown"} to {evt.Receiver ?? "unknown"}",
+            (EventType)19 => $"Goal from {evt.Thrower ?? "unknown"} to {evt.Receiver ?? "unknown"}",
+            (EventType)20 => $"Drop by {evt.Receiver ?? evt.Thrower ?? "unknown"}",
+            (EventType)22 => $"Throwaway by {evt.Thrower ?? "unknown"}",
             _ => $"Event type {evt.Type}"
         };
     }
@@ -207,66 +184,5 @@ public class UfaGameEventService : BackgroundService
         var dx = x2.Value - x1.Value;
         var dy = y2.Value - y1.Value;
         return (int)Math.Round(Math.Sqrt(dx * dx + dy * dy));
-    }
-
-    private static bool TryResolveDiscPosition(UfaGameEvent evt, out FieldPosition discPosition)
-    {
-        discPosition = new FieldPosition();
-
-        if (evt.ReceiverX.HasValue && evt.ReceiverY.HasValue)
-        {
-            discPosition.X = (float)evt.ReceiverX.Value;
-            discPosition.Y = (float)evt.ReceiverY.Value;
-            return true;
-        }
-
-        if (evt.ThrowerX.HasValue && evt.ThrowerY.HasValue)
-        {
-            discPosition.X = (float)evt.ThrowerX.Value;
-            discPosition.Y = (float)evt.ThrowerY.Value;
-            return true;
-        }
-
-        if (evt.PullX.HasValue && evt.PullY.HasValue)
-        {
-            discPosition.X = (float)evt.PullX.Value;
-            discPosition.Y = (float)evt.PullY.Value;
-            return true;
-        }
-
-        discPosition = new FieldPosition { X = 60, Y = 26.5f };
-        return false;
-    }
-
-    private class UfaGameEventsResponse
-    {
-        public string? Object { get; set; }
-        public UfaGameEventsData? Data { get; set; }
-    }
-
-    private class UfaGameEventsData
-    {
-        public List<UfaGameEvent> HomeEvents { get; set; } = new();
-        public List<UfaGameEvent> AwayEvents { get; set; } = new();
-    }
-
-    private class UfaGameEvent
-    {
-        public int Type { get; set; }
-        public int? Time { get; set; }
-        public string? Line { get; set; }
-        public string? Puller { get; set; }
-        public double? PullX { get; set; }
-        public double? PullY { get; set; }
-        public int? PullMs { get; set; }
-        public string? Thrower { get; set; }
-        public double? ThrowerX { get; set; }
-        public double? ThrowerY { get; set; }
-        public string? Receiver { get; set; }
-        public double? ReceiverX { get; set; }
-        public double? ReceiverY { get; set; }
-        public string? Defender { get; set; }
-        public double? TurnoverX { get; set; }
-        public double? TurnoverY { get; set; }
     }
 }

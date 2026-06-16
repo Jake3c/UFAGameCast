@@ -96,7 +96,7 @@ public class StatsController : ControllerBase
     /// Get the last N play events
     /// </summary>
     [HttpGet("recent-plays")]
-    public ActionResult<IEnumerable<PlayEvent>> GetRecentPlays([FromQuery] int count = 10)
+    public ActionResult<IEnumerable<GameEventViewModel>> GetRecentPlays([FromQuery] int count = 10)
     {
         if (count < 1 || count > 100)
             return BadRequest("Count must be between 1 and 100");
