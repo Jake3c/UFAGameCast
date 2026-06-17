@@ -13,7 +13,6 @@ interface GameInfoProps {
  * Displays current game state (score, teams, connection status)
  */
 export const GameInfo: React.FC<GameInfoProps> = ({ gameState, isConnected, error }) => {
-  console.log(gameState);
   return (
     <div>
       <div className="flex justify-between items-center pb-4">

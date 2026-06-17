@@ -15,25 +15,17 @@ export const PlayHistory: React.FC<PlayHistoryProps> = ({ plays, maxVisible = 10
 
   return (
     <div className="">
-      <h2 className="">Recent Plays</h2>
       <div className="">
         <AnimatePresence mode="popLayout">
           {visiblePlays.map((play) => (
             <motion.div
               key={play.id}
-              className="play-item"
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
             >
-              <div className="">
-                {play.time}
-              </div>
-              <div>{play.description}</div>
-              <div>
-                {play.eventType || 'Other'}
-              </div>
+              <PlayHistoryItem play={play} />
             </motion.div>
           ))}
         </AnimatePresence>
@@ -48,15 +40,29 @@ export const PlayHistory: React.FC<PlayHistoryProps> = ({ plays, maxVisible = 10
   );
 };
 
-function PlayHistoryItem({ play }: { play: PlayEvent }){
+function PlayHistoryItem({ play }: { play: PlayEvent }) {
+  console.log(play.eventType);
+  const eventColors: Record<string, string> = {
+    startOPoint: "bg-green-500",
+    startDPoint: "bg-red-500"
+  };
+
+  const barColor =
+    eventColors[play.eventType ?? "Other"] ?? "bg-gray-400";
+
   return (
-    <div className="play-item">
-      <div className="play-time">
-        {play.time}
+    <div className="flex w-full items-center border-b border-gray-200 bg-white min-h-8">
+      {/* Color bar */}
+      <div className={`w-2 self-stretch ${barColor}`} />
+
+      {/* Description */}
+      <div className="flex-1 px-3 text-xs">
+        {play.description}
       </div>
-      <div className="play-description">{play.description}</div>
-      <div className="play-event-type">
-        {play.eventType || 'Other'}
+
+      {/* Time */}
+      <div className="px-3 text-right text-sm text-gray-400 tabular-nums">
+        {play.time}
       </div>
     </div>
   );
