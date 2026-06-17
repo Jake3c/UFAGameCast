@@ -28,6 +28,7 @@ export interface PlayerSnapshot {
 
 export interface PlayEvent {
   id: number;
+  time: string;
   timestamp: string;
   eventType: EventType;
   initiatorPlayerId: number;
@@ -41,7 +42,7 @@ export interface PlayEvent {
 
 export interface GameState {
   gameId: number;
-  currentTime: string;
+  time: string;
   team1Name: string;
   team2Name: string;
   team1Score: number;

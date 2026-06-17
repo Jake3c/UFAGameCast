@@ -13,6 +13,7 @@ interface GameInfoProps {
  * Displays current game state (score, teams, connection status)
  */
 export const GameInfo: React.FC<GameInfoProps> = ({ gameState, isConnected, error }) => {
+  console.log(gameState);
   return (
     <div>
       <div className="flex justify-between items-center pb-4">
@@ -34,7 +35,8 @@ export const GameInfo: React.FC<GameInfoProps> = ({ gameState, isConnected, erro
           </div>
           <div className="flex-grow">
             <div className="text-center">
-              <div className="text-lg font-bold">{gameState ? "11:03" : "00:00"}</div>
+              {/* TODO: Fix time so that it goes off game time, not last play event time */}
+              <div className="text-lg font-bold">{gameState ? gameState.lastPlayEvent?.time : "12:00"}</div>
               <div className="text-sm text-gray-400 font-semibold">Q3</div>
             </div>
           </div>

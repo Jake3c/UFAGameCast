@@ -5,6 +5,8 @@ public class GameEventViewModel
     public int Id { get; set; }
     public EventType EventType { get; set; }
 
+    public string Time { get; set; } = string.Empty;
+
     public int InitiatorPlayerId { get; set; }
     public string InitiatorName { get; set; } = string.Empty;
 

@@ -109,7 +109,7 @@ public class UfaGameEventService : BackgroundService
             var updatedState = new GameState
             {
                 GameId = gameState.GameId,
-                CurrentTime = DateTime.UtcNow,
+                Time = gameState.Time,
                 Team1Name = gameState.Team1Name,
                 Team2Name = gameState.Team2Name,
                 Team1Score = gameState.Team1Score,

@@ -4,7 +4,7 @@ public class GameState
 {
     public int GameId { get; set; }
 
-    public DateTime CurrentTime { get; set; }
+    public string Time { get; set; } = string.Empty;
 
     public string Team1Name { get; set; } = string.Empty;
 

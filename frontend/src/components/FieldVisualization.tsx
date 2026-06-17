@@ -85,6 +85,7 @@ const DiscMarker: React.FC<DiscMarkerProps> = ({ position }) => {
         r={discRadius}
         fill="#ffffff"
         opacity="0.95"
+        
         filter="drop-shadow(0 0 0.5px rgba(0, 0, 0, 0.3))"
       />
 

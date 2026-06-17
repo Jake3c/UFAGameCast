@@ -32,6 +32,15 @@ public class GameStateService
     {
         gameEvent.Id = _gameEventId++;
         gameEvent.Timestamp = DateTime.UtcNow;
+
+        if (gameEvent.EventType == EventType.StartOPoint || gameEvent.EventType == EventType.StartDPoint)
+        {
+            var _random = new Random();
+            var totalSeconds = _random.Next(0, 12 * 60 + 1);
+            var time = $"{totalSeconds / 60:D2}:{totalSeconds % 60:D2}";
+            gameEvent.Time = time;
+        }
+
         _gameEventQueue.Enqueue(gameEvent);
 
         // Keep only the last 50 events in memory
@@ -59,11 +68,11 @@ public class GameStateService
         return new GameState
         {
             GameId = 1,
-            CurrentTime = DateTime.UtcNow,
+            Time = "12:00",
             Team1Name = "Alleycats",
             Team2Name = "Radicals",
-            Team1Score = 18,
-            Team2Score = 19,
+            Team1Score = 0,
+            Team2Score = 0,
             AllPlayers = players,
             DiscPosition = new FieldPosition { X = 60, Y = 26.5f } // Center field
         };

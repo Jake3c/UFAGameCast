@@ -66,6 +66,9 @@ public class GameSimulationService : BackgroundService
         var initiator = players[_random.Next(players.Count)];
         var receiver = players[_random.Next(players.Count)];
 
+        var totalSeconds = _random.Next(0, 12 * 60 + 1);
+        var time = $"{totalSeconds / 60:D2}:{totalSeconds % 60:D2}";
+
         while (receiver.PlayerId == initiator.PlayerId)
         {
             receiver = players[_random.Next(players.Count)];
@@ -102,6 +105,7 @@ public class GameSimulationService : BackgroundService
         return new GameEventViewModel
         {
             EventType = eventType,
+            Time = time,
             InitiatorPlayerId = initiator.PlayerId,
             InitiatorName = initiator.PlayerName,
             ReceiverPlayerId = receiver.PlayerId,
