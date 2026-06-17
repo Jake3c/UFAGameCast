@@ -106,6 +106,28 @@ public class UfaGameEventService : BackgroundService
             return;
         }
 
+        var homeTeamUrl = $"{_baseUrl}/teams?teamIDs={Uri.EscapeDataString(gameData.HomeTeamID)}&years={DateTime.Now.Year}";
+        var awayTeamUrl = $"{_baseUrl}/teams?teamIDs={Uri.EscapeDataString(gameData.AwayTeamID)}&years={DateTime.Now.Year}";
+        var homeTeamResponse = await _httpClient.GetAsync(homeTeamUrl, cancellationToken);
+        var awayTeamResponse = await _httpClient.GetAsync(awayTeamUrl, cancellationToken);
+
+        if (!homeTeamResponse.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("UFA teams request returned {statusCode}: {url}", homeTeamResponse.StatusCode, homeTeamUrl);
+            return;
+        }
+        else if (!awayTeamResponse.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("UFA teams request returned {statusCode}: {url}", awayTeamResponse.StatusCode, awayTeamUrl);
+            return;
+        }
+
+        var homeTeamObject = await homeTeamResponse.Content.ReadFromJsonAsync<TeamsResponse>(_jsonOptions, cancellationToken);
+        var awayTeamObject = await awayTeamResponse.Content.ReadFromJsonAsync<TeamsResponse>(_jsonOptions, cancellationToken);
+
+        var homeTeamData = homeTeamObject?.Data.FirstOrDefault();
+        var awayTeamData = awayTeamObject?.Data.FirstOrDefault();
+
         var updatedGameState = new GameState
         {
             HomeTeamName = gameData.HomeTeamID,
@@ -114,7 +136,13 @@ public class UfaGameEventService : BackgroundService
             AwayTeamScore = gameData.AwayScore,
             GameStatus = gameData.Status,
             Week = gameData.Week,
-            StreamingUrl = gameData.StreamingURL
+            StreamingUrl = gameData.StreamingURL,
+            HomeTeamWins = homeTeamData?.Wins ?? 0,
+            AwayTeamWins = awayTeamData?.Wins ?? 0,
+            HomeTeamLosses = homeTeamData?.Losses ?? 0,
+            AwayTeamLosses = awayTeamData?.Losses ?? 0,
+            HomeTeamDivisionStanding = homeTeamData?.Standing ?? 0,
+            AwayTeamDivisionStanding = awayTeamData?.Standing ?? 0
         };
 
         var eventsObject = await eventsResponse.Content.ReadFromJsonAsync<GameEventsResponse>(_jsonOptions, cancellationToken);

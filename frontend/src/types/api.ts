@@ -45,6 +45,12 @@ export interface GameState {
   awayTeamName: string;
   homeTeamScore: number;
   awayTeamScore: number;
+  homeTeamWins: number;
+  awayTeamWins: number;
+  homeTeamLosses: number;
+  awayTeamLosses: number;
+  homeTeamDivisionStanding: number;
+  awayTeamDivisionStanding: number;
   gameStatus: string;
   isActive: boolean;
   week: string;

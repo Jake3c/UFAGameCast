@@ -13,6 +13,11 @@ interface GameInfoProps {
  * Displays current game state (score, teams, connection status)
  */
 export const GameInfo: React.FC<GameInfoProps> = ({ gameState, isConnected, error }) => {
+
+  const isFinal = gameState?.gameStatus?.toLowerCase() == "final";
+  const isHomeLoser = isFinal && gameState?.homeTeamScore < gameState?.awayTeamScore;
+  const isAwayLoser = isFinal && gameState?.awayTeamScore < gameState?.homeTeamScore;
+
   const toTitleCase = (str: string) =>
   str
     .toLowerCase()
@@ -31,12 +36,12 @@ export const GameInfo: React.FC<GameInfoProps> = ({ gameState, isConnected, erro
             {gameState ? toTitleCase(gameState.awayTeamName) : "Away"}
           </div>
           <div className="text-gray-400 text-xs">
-            (1-4)
+            {gameState ? `(${gameState.awayTeamWins}-${gameState.awayTeamLosses})` : ""}
           </div>
         </div>
 
         <div className='w-full px-2 flex justify-between'>
-          <div className="text-3xl font-bold">
+          <div className={`text-3xl font-bold ${isAwayLoser ? 'text-gray-500' : ''}`}>
             {gameState ? gameState.awayTeamScore : "0"}
           </div>
           <div className="flex-grow">
@@ -44,7 +49,7 @@ export const GameInfo: React.FC<GameInfoProps> = ({ gameState, isConnected, erro
               {gameState?.isActive && (
                 <div className="text-lg font-bold">12:00</div>
               )}
-              <div className="text-sm text-gray-400 font-semibold">{gameState?.gameStatus}</div>
+              <div className="text-sm text-gray-500 font-semibold">{gameState?.gameStatus}</div>
               {gameState?.streamingUrl && (
                 <a
                   href={gameState?.streamingUrl}
@@ -71,7 +76,7 @@ export const GameInfo: React.FC<GameInfoProps> = ({ gameState, isConnected, erro
               )}
             </div>
           </div>
-          <div className="text-3xl font-bold">
+          <div className={`text-3xl font-bold ${isHomeLoser ? 'text-gray-500' : ''}`}>
             {gameState ? gameState.homeTeamScore : "0"}
           </div>
         </div>
@@ -84,7 +89,7 @@ export const GameInfo: React.FC<GameInfoProps> = ({ gameState, isConnected, erro
             {gameState ? toTitleCase(gameState.homeTeamName) : "Home"}
           </div>
           <div className="text-gray-400 text-xs">
-            (3-2)
+            {gameState ? `(${gameState.homeTeamWins}-${gameState.homeTeamLosses})` : ""}
           </div>
         </div>
       </div>
