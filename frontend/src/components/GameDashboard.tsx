@@ -27,11 +27,7 @@ export const GameDashboard: React.FC = () => {
 
       <div className="dashboard-content">
         <div className="field-section">
-          {gameState?.allPlayers ? (
-            <FieldVisualization discPosition={gameState.discPosition} />
-          ) : (
-            <div className="loading-placeholder">Loading field data...</div>
-          )}
+            <FieldVisualization discPosition={gameState?.discPosition} />
         </div>
 
         <div className="plays-section">

@@ -28,8 +28,8 @@ builder.Services.AddSingleton<GameStateService>();
 builder.Services.AddHttpClient();
 
 //Switch for testing
-//builder.Services.AddHostedService<UfaGameEventService>();
-builder.Services.AddHostedService<GameSimulationService>();
+builder.Services.AddHostedService<UfaGameEventService>();
+//builder.Services.AddHostedService<GameSimulationService>();
 
 var app = builder.Build();
 

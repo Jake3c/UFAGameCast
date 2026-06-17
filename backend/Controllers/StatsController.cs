@@ -44,7 +44,6 @@ public class StatsController : ControllerBase
             await SendEvent(Response, "gamestate", initialState, cancellationToken);
 
             // Track the last event ID we sent to avoid duplicate sends
-            var lastSentEventId = initialState.LastPlayEvent?.Id ?? 0;
             var lastSentTime = DateTime.UtcNow;
 
             // Keep sending updates every 2 seconds or when new events occur
@@ -57,13 +56,6 @@ public class StatsController : ControllerBase
                 {
                     await SendEvent(Response, "gamestate", currentState, cancellationToken);
                     lastSentTime = DateTime.UtcNow;
-                }
-
-                // Check for new play events
-                if (currentState.LastPlayEvent?.Id > lastSentEventId)
-                {
-                    await SendEvent(Response, "playevent", currentState.LastPlayEvent, cancellationToken);
-                    lastSentEventId = currentState.LastPlayEvent.Id;
                 }
 
                 await Task.Delay(500, cancellationToken); // Poll interval

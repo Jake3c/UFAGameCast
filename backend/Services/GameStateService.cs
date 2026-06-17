@@ -52,7 +52,7 @@ public class GameStateService
         // Update the current game state with the latest event
         lock (_lockObject)
         {
-            _currentGameState.LastPlayEvent = gameEvent;
+            //_currentGameState.LastPlayEvent = gameEvent;
         }
     }
 
@@ -63,63 +63,13 @@ public class GameStateService
 
     private GameState InitializeGameState()
     {
-        var players = GenerateSamplePlayers();
-
         return new GameState
         {
-            GameId = 1,
-            Time = "12:00",
-            Team1Name = "Alleycats",
-            Team2Name = "Radicals",
-            Team1Score = 0,
-            Team2Score = 0,
-            AllPlayers = players,
+            HomeTeamName = "Team1",
+            AwayTeamName = "Team2",
+            HomeTeamScore = 0,
+            AwayTeamScore = 0,
             DiscPosition = new FieldPosition { X = 60, Y = 26.5f } // Center field
         };
-    }
-
-    private List<PlayerSnapshot> GenerateSamplePlayers()
-    {
-        var players = new List<PlayerSnapshot>();
-
-        // Team 1 (Hawks)
-        var team1Players = new[]
-        {
-            (1, "Carrico"), (2, "Coniff"), (3, "Marks"), (4, "Smith"),
-            (5, "Johnson"), (6, "Williams"), (7, "Brown")
-        };
-
-        foreach (var (id, name) in team1Players)
-        {
-            players.Add(new PlayerSnapshot
-            {
-                PlayerId = id,
-                PlayerName = name,
-                Team = "Hawks",
-                JerseyNumber = id,
-                Position = new FieldPosition { X = Random.Shared.Next(10, 90), Y = Random.Shared.Next(10, 90) }
-            });
-        }
-
-        // Team 2 (Eagles)
-        var team2Players = new[]
-        {
-            (8, "Davis"), (9, "Miller"), (10, "Taylor"), (11, "Anderson"),
-            (12, "Thomas"), (13, "Jackson"), (14, "White")
-        };
-
-        foreach (var (id, name) in team2Players)
-        {
-            players.Add(new PlayerSnapshot
-            {
-                PlayerId = id,
-                PlayerName = name,
-                Team = "Eagles",
-                JerseyNumber = id,
-                Position = new FieldPosition { X = Random.Shared.Next(10, 90), Y = Random.Shared.Next(10, 90) }
-            });
-        }
-
-        return players;
     }
 }

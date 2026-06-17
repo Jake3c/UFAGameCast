@@ -41,15 +41,15 @@ export interface PlayEvent {
 }
 
 export interface GameState {
-  gameId: number;
-  time: string;
-  team1Name: string;
-  team2Name: string;
-  team1Score: number;
-  team2Score: number;
-  allPlayers: PlayerSnapshot[];
-  lastPlayEvent?: PlayEvent;
+  homeTeamName: string;
+  awayTeamName: string;
+  homeTeamScore: number;
+  awayTeamScore: number;
+  gameStatus: string;
+  isActive: boolean;
+  week: string;
   discPosition: FieldPosition;
+  streamingUrl: string;
 }
 
 export interface StatsStreamEvent {

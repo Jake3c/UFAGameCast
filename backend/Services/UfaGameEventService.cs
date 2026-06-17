@@ -1,7 +1,4 @@
-using System.Diagnostics.Eventing.Reader;
-using System.Net.Http.Json;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using UFAGameCast.Backend.Models;
 
 namespace UFAGameCast.Backend.Services;
@@ -26,7 +23,7 @@ public class UfaGameEventService : BackgroundService
         _logger = logger;
         _httpClient = httpClientFactory.CreateClient();
         _baseUrl = configuration["UFA_API_BASE_URL"]?.TrimEnd('/') ?? "https://www.backend.ufastats.com/api/v1";
-        _gameId = configuration["UFA_GAME_ID"] ?? "2026-06-14-IND-MAD"; //TODO: Fix hardcode here
+        _gameId = configuration["UFA_GAME_ID"] ?? "2026-05-09-SLC-COL"; //TODO: Fix hardcode here
         _jsonOptions = new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -67,26 +64,69 @@ public class UfaGameEventService : BackgroundService
 
     private async Task PollGameEventsAsync(CancellationToken cancellationToken)
     {
-        var url = $"{_baseUrl}/gameEvents?gameID={Uri.EscapeDataString(_gameId)}";
-        var response = await _httpClient.GetAsync(url, cancellationToken);
+        var eventsUrl = $"{_baseUrl}/gameEvents?gameID={Uri.EscapeDataString(_gameId)}";
+        var gameUrl = $"{_baseUrl}/games?gameIDs={Uri.EscapeDataString(_gameId)}";
+        var playerUrl = $"{_baseUrl}/playerGameStats?gameID={Uri.EscapeDataString(_gameId)}";
 
-        if (!response.IsSuccessStatusCode)
+        var eventsTask = _httpClient.GetAsync(eventsUrl, cancellationToken);
+        var gameTask = _httpClient.GetAsync(gameUrl, cancellationToken);
+        var playerTask = _httpClient.GetAsync(playerUrl, cancellationToken);
+
+        var eventsResponse = await eventsTask;
+        var gameResponse = await gameTask;
+        var playerResponse = await playerTask;
+
+        if (!eventsResponse.IsSuccessStatusCode)
         {
-            _logger.LogWarning("UFA game events request returned {statusCode}: {url}", response.StatusCode, url);
+            _logger.LogWarning("UFA game events request returned {statusCode}: {url}", eventsResponse.StatusCode, eventsUrl);
+            return;
+        }
+        else if (!gameResponse.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("UFA game request returned {statusCode}: {url}", gameResponse.StatusCode, gameUrl);
+            return;
+        }
+        else if (!playerResponse.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("UFA player request returned {statusCode}: {url}", playerResponse.StatusCode, playerUrl);
             return;
         }
 
-        var content = await response.Content.ReadAsStringAsync();
-        var payload = await response.Content.ReadFromJsonAsync<GameEventsResponse>(_jsonOptions, cancellationToken);
-        if (payload?.Data == null)
+        var gameObject = await gameResponse.Content.ReadFromJsonAsync<GameResponse>(_jsonOptions, cancellationToken);
+        if (gameObject?.Data == null)
+        {
+            _logger.LogWarning("UFA game response did not contain data");
+            return;
+        }
+
+        var gameData = gameObject.Data.FirstOrDefault();
+        if (gameData == null)
+        {
+            _logger.LogWarning("UFA game data not found");
+            return;
+        }
+
+        var updatedGameState = new GameState
+        {
+            HomeTeamName = gameData.HomeTeamID,
+            AwayTeamName = gameData.AwayTeamID,
+            HomeTeamScore = gameData.HomeScore,
+            AwayTeamScore = gameData.AwayScore,
+            GameStatus = gameData.Status,
+            Week = gameData.Week,
+            StreamingUrl = gameData.StreamingURL
+        };
+
+        var eventsObject = await eventsResponse.Content.ReadFromJsonAsync<GameEventsResponse>(_jsonOptions, cancellationToken);
+        if (eventsObject?.Data == null)
         {
             _logger.LogWarning("UFA game events response did not contain data");
             return;
         }
 
-        var mergedEvents = payload.Data.HomeEvents
+        var mergedEvents = eventsObject.Data.HomeEvents
             .Select((evt, index) => new { Source = "home", Event = evt, Index = index })
-            .Concat(payload.Data.AwayEvents.Select((evt, index) => new { Source = "away", Event = evt, Index = index }))
+            .Concat(eventsObject.Data.AwayEvents.Select((evt, index) => new { Source = "away", Event = evt, Index = index }))
             .OrderBy(pair => pair.Event.Timestamp)
             .ThenBy(pair => pair.Index)
             .ToList();
@@ -105,21 +145,7 @@ public class UfaGameEventService : BackgroundService
                 continue;
             }
 
-            var gameState = _gameStateService.GetCurrentGameState();
-            var updatedState = new GameState
-            {
-                GameId = gameState.GameId,
-                Time = gameState.Time,
-                Team1Name = gameState.Team1Name,
-                Team2Name = gameState.Team2Name,
-                Team1Score = gameState.Team1Score,
-                Team2Score = gameState.Team2Score,
-                AllPlayers = gameState.AllPlayers,
-                LastPlayEvent = playEvent,
-                DiscPosition = gameState.DiscPosition
-            };
-
-            _gameStateService.UpdateGameState(updatedState);
+            _gameStateService.UpdateGameState(updatedGameState);
             _gameStateService.AddPlayEvent(playEvent);
 
             _logger.LogInformation("Processed UFA event type={eventType} description={description}", pair.Event.Type, playEvent.Description);
