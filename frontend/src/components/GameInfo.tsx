@@ -12,7 +12,7 @@ interface GameInfoProps {
 /**
  * Displays current game state (score, teams, connection status)
  */
-export const GameInfo: React.FC<GameInfoProps> = ({ gameState, isConnected, error }) => {
+export const GameInfo: React.FC<GameInfoProps> = ({ gameState }) => {
 
   const isFinal = gameState?.gameStatus?.toLowerCase() == "final";
   const isHomeLoser = isFinal && gameState?.homeTeamScore < gameState?.awayTeamScore;
@@ -71,7 +71,7 @@ export const GameInfo: React.FC<GameInfoProps> = ({ gameState, isConnected, erro
                     duration-150
                   "
                 >
-                  {gameState?.isActive ? "Watch LIVE" : "Watch Replay"}
+                  {gameState?.isActive ? "Watch LIVE" : gameState?.gameStatus === "Final" ? "Watch Replay" : "Watch"}
                 </a>
               )}
             </div>

@@ -4,13 +4,18 @@ using UFAGameCast.Backend.Models;
 namespace UFAGameCast.Backend.Services;
 
 /// <summary>
-/// Manages the current game state and maintains a queue of recent play events
+/// Manages the current game state and maintains both:
+/// - Full game history
+/// - Recent event queue
 /// </summary>
 public class GameStateService
 {
-    private readonly ConcurrentQueue<GameEventViewModel> _gameEventQueue = new();
+    private readonly ConcurrentQueue<GameEventViewModel> _recentGameEventQueue = new();
+    private readonly List<GameEventViewModel> _allGameEvents = new();
+
     private GameState _currentGameState;
     private int _gameEventId = 1;
+
     private readonly object _lockObject = new();
 
     public GameStateService()
@@ -18,7 +23,13 @@ public class GameStateService
         _currentGameState = InitializeGameState();
     }
 
-    public GameState GetCurrentGameState() => _currentGameState;
+    public GameState GetCurrentGameState()
+    {
+        lock (_lockObject)
+        {
+            return _currentGameState;
+        }
+    }
 
     public void UpdateGameState(GameState state)
     {
@@ -28,40 +39,103 @@ public class GameStateService
         }
     }
 
+    /// <summary>
+    /// Adds a newly processed event.
+    /// Used by UfaGameEventService when new events arrive.
+    /// </summary>
     public void AddPlayEvent(GameEventViewModel gameEvent)
     {
         gameEvent.Id = _gameEventId++;
-        gameEvent.Timestamp = DateTime.UtcNow;
 
-        if (gameEvent.EventType == EventType.StartOPoint || gameEvent.EventType == EventType.StartDPoint)
+        // Preserve existing timestamp if already supplied
+        if (gameEvent.Timestamp == default)
         {
-            var _random = new Random();
-            var totalSeconds = _random.Next(0, 12 * 60 + 1);
-            var time = $"{totalSeconds / 60:D2}:{totalSeconds % 60:D2}";
-            gameEvent.Time = time;
+            gameEvent.Timestamp = DateTime.UtcNow;
         }
 
-        _gameEventQueue.Enqueue(gameEvent);
-
-        // Keep only the last 50 events in memory
-        while (_gameEventQueue.Count > 50)
+        if (gameEvent.EventType == EventType.StartOPoint ||
+            gameEvent.EventType == EventType.StartDPoint)
         {
-            _gameEventQueue.TryDequeue(out _);
+            var random = new Random();
+
+            var totalSeconds = random.Next(0, 12 * 60 + 1);
+
+            gameEvent.Time =
+                $"{totalSeconds / 60:D2}:{totalSeconds % 60:D2}";
         }
 
-        // Update the current game state with the latest event
         lock (_lockObject)
         {
-            //_currentGameState.LastPlayEvent = gameEvent;
+            _allGameEvents.Add(gameEvent);
+        }
+
+        _recentGameEventQueue.Enqueue(gameEvent);
+
+        // Keep only the most recent 50 events in the queue
+        while (_recentGameEventQueue.Count > 50)
+        {
+            _recentGameEventQueue.TryDequeue(out _);
         }
     }
 
-    public IEnumerable<GameEventViewModel> GetRecentPlayEvents(int count = 10)
+    /// <summary>
+    /// Replaces the entire play history.
+    /// Useful when rebuilding from a complete UFA event feed.
+    /// </summary>
+    public void SetPlayHistory(IEnumerable<GameEventViewModel> events)
     {
-        return _gameEventQueue.TakeLast(count).Reverse();
+        lock (_lockObject)
+        {
+            _allGameEvents.Clear();
+            _recentGameEventQueue.Clear();
+
+            foreach (var evt in events)
+            {
+                if (evt.Id == 0)
+                {
+                    evt.Id = _gameEventId++;
+                }
+
+                if (evt.Timestamp == default)
+                {
+                    evt.Timestamp = DateTime.UtcNow;
+                }
+
+                _allGameEvents.Add(evt);
+
+                _recentGameEventQueue.Enqueue(evt);
+
+                while (_recentGameEventQueue.Count > 50)
+                {
+                    _recentGameEventQueue.TryDequeue(out _);
+                }
+            }
+        }
     }
 
-    private GameState InitializeGameState()
+    /// <summary>
+    /// Returns the full game history in chronological order.
+    /// </summary>
+    public IReadOnlyList<GameEventViewModel> GetAllPlayEvents()
+    {
+        lock (_lockObject)
+        {
+            return _allGameEvents.ToList();
+        }
+    }
+
+    /// <summary>
+    /// Returns only the most recent events.
+    /// Default = 10.
+    /// </summary>
+    public IEnumerable<GameEventViewModel> GetRecentPlayEvents(int count = 10)
+    {
+        return _recentGameEventQueue
+            .TakeLast(count)
+            .Reverse();
+    }
+
+    private static GameState InitializeGameState()
     {
         return new GameState
         {
@@ -69,7 +143,11 @@ public class GameStateService
             AwayTeamName = "Team2",
             HomeTeamScore = 0,
             AwayTeamScore = 0,
-            DiscPosition = new FieldPosition { X = 60, Y = 26.5f } // Center field
+            DiscPosition = new FieldPosition
+            {
+                X = 60,
+                Y = 26.5f
+            }
         };
     }
 }

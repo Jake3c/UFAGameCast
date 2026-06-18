@@ -12,53 +12,101 @@ public class StatsController : ControllerBase
 {
     private readonly GameStateService _gameStateService;
     private readonly ILogger<StatsController> _logger;
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
+        Converters =
+        {
+            new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)
+        }
     };
 
-    public StatsController(GameStateService gameStateService, ILogger<StatsController> logger)
+    public StatsController(
+        GameStateService gameStateService,
+        ILogger<StatsController> logger)
     {
         _gameStateService = gameStateService;
         _logger = logger;
     }
 
     /// <summary>
-    /// Server-Sent Events endpoint for streaming live game state and play events
-    /// Client establishes a persistent HTTP connection to receive real-time updates
+    /// Initial load endpoint.
+    /// Returns the current game state and complete play history.
+    /// </summary>
+    [HttpGet("snapshot")]
+    public IActionResult GetSnapshot()
+    {
+        return Ok(new
+        {
+            gameState = _gameStateService.GetCurrentGameState(),
+            playHistory = _gameStateService.GetAllPlayEvents()
+        });
+    }
+
+    /// <summary>
+    /// SSE endpoint for live updates.
+    /// Sends game state updates and newly-added play events.
     /// </summary>
     [HttpGet("live")]
     public async Task GetLiveStats(CancellationToken cancellationToken)
     {
         Response.ContentType = "text/event-stream";
         Response.Headers["Cache-Control"] = "no-cache";
+        Response.Headers["Connection"] = "keep-alive";
         Response.Headers["X-Accel-Buffering"] = "no";
 
         _logger.LogInformation("SSE client connected");
 
         try
         {
-            // Send initial game state
-            var initialState = _gameStateService.GetCurrentGameState();
-            await SendEvent(Response, "gamestate", initialState, cancellationToken);
+            // Send current state immediately
+            await SendEvent(
+                Response,
+                "gamestate",
+                _gameStateService.GetCurrentGameState(),
+                cancellationToken);
 
-            // Track the last event ID we sent to avoid duplicate sends
-            var lastSentTime = DateTime.UtcNow;
+            // Don't replay history.
+            // Client gets history from /snapshot.
+            var lastPlayCount = _gameStateService
+                .GetAllPlayEvents()
+                .Count;
 
-            // Keep sending updates every 2 seconds or when new events occur
+            var lastGameStatePush = DateTime.UtcNow;
+
             while (!cancellationToken.IsCancellationRequested)
             {
-                var currentState = _gameStateService.GetCurrentGameState();
-
-                // Send updated game state periodically
-                if (DateTime.UtcNow - lastSentTime > TimeSpan.FromSeconds(2))
+                // Push game state every 2 seconds
+                if (DateTime.UtcNow - lastGameStatePush >= TimeSpan.FromSeconds(2))
                 {
-                    await SendEvent(Response, "gamestate", currentState, cancellationToken);
-                    lastSentTime = DateTime.UtcNow;
+                    await SendEvent(
+                        Response,
+                        "gamestate",
+                        _gameStateService.GetCurrentGameState(),
+                        cancellationToken);
+
+                    lastGameStatePush = DateTime.UtcNow;
                 }
 
-                await Task.Delay(500, cancellationToken); // Poll interval
+                // Push any new play events
+                var plays = _gameStateService.GetAllPlayEvents();
+
+                if (plays.Count > lastPlayCount)
+                {
+                    foreach (var play in plays.Skip(lastPlayCount))
+                    {
+                        await SendEvent(
+                            Response,
+                            "playevent",
+                            play,
+                            cancellationToken);
+                    }
+
+                    lastPlayCount = plays.Count;
+                }
+
+                await Task.Delay(500, cancellationToken);
             }
         }
         catch (OperationCanceledException)
@@ -76,7 +124,7 @@ public class StatsController : ControllerBase
     }
 
     /// <summary>
-    /// Get the current game state (polling alternative to SSE)
+    /// Polling fallback endpoint.
     /// </summary>
     [HttpGet("current")]
     public ActionResult<GameState> GetCurrentState()
@@ -84,30 +132,22 @@ public class StatsController : ControllerBase
         return Ok(_gameStateService.GetCurrentGameState());
     }
 
-    /// <summary>
-    /// Get the last N play events
-    /// </summary>
-    [HttpGet("recent-plays")]
-    public ActionResult<IEnumerable<GameEventViewModel>> GetRecentPlays([FromQuery] int count = 10)
+    private async Task SendEvent<T>(
+        HttpResponse response,
+        string eventType,
+        T data,
+        CancellationToken cancellationToken)
     {
-        if (count < 1 || count > 100)
-            return BadRequest("Count must be between 1 and 100");
+        var json = JsonSerializer.Serialize(data, JsonOptions);
 
-        return Ok(_gameStateService.GetRecentPlayEvents(count));
-    }
+        await response.WriteAsync(
+            $"event: {eventType}\n",
+            cancellationToken);
 
-    private async Task SendEvent<T>(HttpResponse response, string eventType, T data, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var json = JsonSerializer.Serialize(data, JsonOptions);
-            var sseMessage = $"event: {eventType}\ndata: {json}\n\n";
-            await response.WriteAsync(sseMessage, cancellationToken);
-            await response.Body.FlushAsync(cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error sending SSE event");
-        }
+        await response.WriteAsync(
+            $"data: {json}\n\n",
+            cancellationToken);
+
+        await response.Body.FlushAsync(cancellationToken);
     }
 }

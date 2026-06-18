@@ -58,7 +58,6 @@ export interface GameState {
   streamingUrl: string;
 }
 
-export interface StatsStreamEvent {
-  type: 'gamestate' | 'playevent';
-  data: GameState | PlayEvent;
-}
+export type StatsStreamEvent =
+  | { type: 'gamestate'; data: GameState }
+  | { type: 'playevent'; data: PlayEvent };

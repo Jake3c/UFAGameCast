@@ -16,5 +16,6 @@ public class GameState
     public bool IsActive => GameStatus != "Upcoming" && GameStatus != "Final" && GameStatus != "Postponed" && GameStatus != "Abandoned";
     public string StreamingUrl { get; set; } = string.Empty;
     public string Week { get; set; } = string.Empty;
+    public List<GameEvent> GameEvents { get; set; } = new List<GameEvent>();
     public FieldPosition DiscPosition { get; set; } = new FieldPosition();
 }
