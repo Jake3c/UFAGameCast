@@ -6,6 +6,7 @@ import { GameState, PlayEvent, StatsStreamEvent } from '../types/api';
  * 2. SSE live updates (incremental updates only)
  */
 export class StatsService {
+  private gameId = '';
   private eventSource: EventSource | null = null;
 
   private listeners: Array<(event: StatsStreamEvent) => void> = [];
@@ -15,6 +16,10 @@ export class StatsService {
   private reconnectDelay = 1000;
 
   private readonly apiUrl: string;
+
+  setGameId(gameId: string){
+    this.gameId = gameId;
+  }
 
   constructor(apiUrl: string = import.meta.env.VITE_API_URL || 'http://localhost:5000') {
     this.apiUrl = apiUrl;
@@ -28,7 +33,7 @@ export class StatsService {
     gameState: GameState;
     playHistory: PlayEvent[];
   }> {
-    const res = await fetch(`${this.apiUrl}/api/stats/snapshot`);
+    const res = await fetch(`${this.apiUrl}/api/stats/snapshot?gameId=${encodeURIComponent(this.gameId)}`);
 
     if (!res.ok) {
       throw new Error(`Failed to load snapshot: ${res.status}`);

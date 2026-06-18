@@ -11,6 +11,7 @@ namespace UFAGameCast.Backend.Controllers;
 public class StatsController : ControllerBase
 {
     private readonly GameStateService _gameStateService;
+    private readonly UfaGameEventService _ufaGameEventService;
     private readonly ILogger<StatsController> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -24,9 +25,11 @@ public class StatsController : ControllerBase
 
     public StatsController(
         GameStateService gameStateService,
+        UfaGameEventService ufaGameEventService,
         ILogger<StatsController> logger)
     {
         _gameStateService = gameStateService;
+        _ufaGameEventService = ufaGameEventService;
         _logger = logger;
     }
 
@@ -35,8 +38,11 @@ public class StatsController : ControllerBase
     /// Returns the current game state and complete play history.
     /// </summary>
     [HttpGet("snapshot")]
-    public IActionResult GetSnapshot()
+    public async Task<IActionResult> GetSnapshot([FromQuery] string gameId)
     {
+        _gameStateService.SetCurrentGameId(gameId);
+        await _ufaGameEventService.RefreshGame(gameId);
+
         return Ok(new
         {
             gameState = _gameStateService.GetCurrentGameState(),

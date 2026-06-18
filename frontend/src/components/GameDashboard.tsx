@@ -12,6 +12,8 @@ import { GameState, PlayEvent } from '../types/api';
 export const GameDashboard: React.FC = () => {
   const stats = getStatsService();
 
+  const [gameId, setGameId] = useState<string>('');
+  const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [recentPlays, setRecentPlays] = useState<PlayEvent[]>([]);
   const [isConnected, setIsConnected] = useState(false);
@@ -21,57 +23,98 @@ export const GameDashboard: React.FC = () => {
   // BOOTSTRAP SNAPSHOT + CONNECT SSE
   // =========================================================
   useEffect(() => {
+    if (!selectedGameId) return;
+
     let unsubscribe: (() => void) | null = null;
 
     const init = async () => {
-      try {
-        // 1. Load snapshot (INITIAL STATE)
+        try {
+        stats.disconnect();
+
+        stats.setGameId(selectedGameId);
+
         const snapshot = await stats.getSnapshot();
 
         setGameState(snapshot.gameState);
         setRecentPlays(snapshot.playHistory);
 
-        // 2. Connect SSE stream
         await stats.connect();
         setIsConnected(true);
 
-        // 3. Subscribe to live updates
         unsubscribe = stats.subscribe((event) => {
-          if (event.type === 'gamestate') {
+            if (event.type === 'gamestate') {
             setGameState(event.data);
-          }
+            }
 
-          if (event.type === 'playevent') {
-            setRecentPlays((prev) => {
-              const updated = [...prev, event.data];
-
-              // keep only last 50 in UI
-              return updated.slice(-50);
-            });
-          }
+            if (event.type === 'playevent') {
+            setRecentPlays((prev) =>
+                [...prev, event.data].slice(-50)
+            );
+            }
         });
-      } catch (err: any) {
-        console.error(err);
+        } catch (err: any) {
         setError(err.message ?? 'Failed to load game data');
-      }
+        }
     };
 
     init();
 
     return () => {
-      unsubscribe?.();
-      stats.disconnect();
+        unsubscribe?.();
+        stats.disconnect();
     };
-  }, []);
+    }, [selectedGameId]);
 
   // =========================================================
   // RENDER
   // =========================================================
 
+    if (!selectedGameId) {
+    return (
+        <div className="min-h-screen flex items-center justify-center">
+        <div className="w-full max-w-md p-6">
+            <h1 className="text-2xl font-bold mb-4 text-center">
+            UFA GameCast
+            </h1>
+
+            <input
+            type="text"
+            value={gameId}
+            onChange={(e) => setGameId(e.target.value)}
+            placeholder="2026-05-09-SLC-COL"
+            className="w-full border rounded px-3 py-2 mb-3"
+            />
+
+            <button
+            className="w-full bg-blue-600 text-white rounded px-3 py-2"
+            onClick={() => {
+                if (gameId.trim()) {
+                setSelectedGameId(gameId.trim());
+                }
+            }}
+            >
+            Load Game
+            </button>
+        </div>
+        </div>
+    );
+    }
+
   return (
     <div>
       {/* Header */}
-      <div className="text-center font-semibold py-1 bg-slate-800">
+      <div className="text-center font-semibold py-1 bg-slate-800 relative">
+        <button
+            className="text-white left-2 top-1/2 -translate-y-1/2 absolute"
+            onClick={() => {
+                stats.disconnect();
+                setSelectedGameId(null);
+                setGameState(null);
+                setRecentPlays([]);
+            }}
+            >
+            Back
+        </button>
         <img
           src={UfaLogo}
           alt="UFA Gamecast Logo"

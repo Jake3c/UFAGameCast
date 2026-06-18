@@ -8,7 +8,6 @@ public class UfaGameEventService : BackgroundService
     private readonly GameStateService _gameStateService;
     private readonly HttpClient _httpClient;
     private readonly ILogger<UfaGameEventService> _logger;
-    private readonly string _gameId;
     private readonly string _baseUrl;
     private readonly JsonSerializerOptions _jsonOptions;
 
@@ -33,7 +32,7 @@ public class UfaGameEventService : BackgroundService
         _httpClient = httpClientFactory.CreateClient();
         _baseUrl = configuration["UFA_API_BASE_URL"]?.TrimEnd('/') ?? "https://www.backend.ufastats.com/api/v1";
 
-        _gameId = configuration["UFA_GAME_ID"] ?? "2026-05-09-SLC-COL";
+        //_gameId = configuration["UFA_GAME_ID"] ?? "2026-05-09-SLC-COL";
         //_gameId = configuration["UFA_GAME_ID"] ?? "2026-06-19-TOR-ORE";
 
         _jsonOptions = new JsonSerializerOptions
@@ -48,14 +47,15 @@ public class UfaGameEventService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (string.IsNullOrWhiteSpace(_gameId))
+        var gameId = _gameStateService.GetCurrentGameId();
+        if (string.IsNullOrWhiteSpace(gameId))
         {
             _logger.LogWarning("UFA_GAME_ID not configured. Service disabled.");
             await Task.Delay(Timeout.Infinite, stoppingToken);
             return;
         }
 
-        _logger.LogInformation("UFA service started for gameId={gameId}", _gameId);
+        _logger.LogInformation("UFA service started for gameId={gameId}", gameId);
         var a = 0;
 
         while (!stoppingToken.IsCancellationRequested)
@@ -63,7 +63,7 @@ public class UfaGameEventService : BackgroundService
             try
             {
                 await EnsureTeamCache(stoppingToken);
-                await PollGameCycle(stoppingToken);
+                await PollGameCycle(gameId, stoppingToken);
                 Console.WriteLine(a++);
             }
             catch (Exception ex)
@@ -81,10 +81,16 @@ public class UfaGameEventService : BackgroundService
     // POLLING ORCHESTRATION
     // =========================================================
 
-    private async Task PollGameCycle(CancellationToken token)
+    private async Task PollGameCycle(string gameId, CancellationToken token)
     {
-        var eventsUrl = $"{_baseUrl}/gameEvents?gameID={Uri.EscapeDataString(_gameId)}";
-        var gameUrl = $"{_baseUrl}/games?gameIDs={Uri.EscapeDataString(_gameId)}";
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            _logger.LogWarning("No active game. Skipping poll cycle.");
+            return;
+        }
+
+        var eventsUrl = $"{_baseUrl}/gameEvents?gameID={Uri.EscapeDataString(gameId)}";
+        var gameUrl = $"{_baseUrl}/games?gameIDs={Uri.EscapeDataString(gameId)}";
 
         var eventsTask = _httpClient.GetAsync(eventsUrl, token);
         var gameTask = _httpClient.GetAsync(gameUrl, token);
@@ -118,6 +124,12 @@ public class UfaGameEventService : BackgroundService
     // =========================================================
     // GAME DATA
     // =========================================================
+
+    public async Task RefreshGame(string gameId)
+    {
+        await EnsureTeamCache(CancellationToken.None);
+        await PollGameCycle(gameId, CancellationToken.None);
+    }
 
     private async Task<GameData> ExtractGameData(HttpResponseMessage response, CancellationToken token)
     {
@@ -275,28 +287,29 @@ public class UfaGameEventService : BackgroundService
     private static string BuildDescription(GameEvent evt, int? distance) => evt.Type switch
     {
         //Fill in descs here
-        EventType.StartDPoint => $"Start of D-Point by {evt.Thrower ?? "unknown"}",
-        EventType.StartOPoint => $"Start of O-Point by {evt.Thrower ?? "unknown"}",
-        EventType.MidpointTimeoutRecording => $"Midpoint timeout for {evt.Thrower ?? "unknown"}",
-        EventType.BetweenPointTimeoutRecording => $"Between point timeout for {evt.Thrower ?? "unknown"}",
-        //EventType.MidpointTimeoutOpponent => $"Midpoint timeout for opponent {evt.Thrower ?? "unknown"}",
-        //EventType.BetweenPointTimeoutOpponent => $"Between point timeout for opponent {evt.Thrower ?? "unknown"}",
-        EventType.PullInbounds => $"Pull inbounds by {evt.Puller ?? "unknown"}",
-        EventType.PullOutOfBounds => $"Pull out of bounds by {evt.Puller ?? "unknown"}",
-        EventType.OffsidesRecording => $"Offside for {evt.Thrower ?? "unknown"}",
-        //EventType.OffsidesOpponent => $"Offside for opponent {evt.Thrower ?? "unknown"}",
-        EventType.Block => $"Block by {evt.Defender ?? "unknown"}",
-        EventType.CallahanThrownByOpponent => $"Callahan by {evt.Receiver ?? "unknown"}",
-        EventType.Pass => $"{distance} yard pass from {evt.Thrower} to {evt.Receiver}",
-        EventType.Goal => $"{distance} yard goal by {evt.Thrower}",
-        EventType.Drop => $"Drop by {evt.Thrower}",
-        EventType.DroppedPull => $"Dropped pull by {evt.Puller}",
-        EventType.ThrowawayByRecording => $"Throwaway by {evt.Thrower}",
+        EventType.StartDPoint => $"Start of D-Point by {FormatPlayerName(evt.Thrower)}",
+        EventType.StartOPoint => $"Start of O-Point by {FormatPlayerName(evt.Thrower)}",
+        EventType.MidpointTimeoutRecording => $"Midpoint timeout for {FormatPlayerName(evt.Thrower)}",
+        EventType.BetweenPointTimeoutRecording => $"Between point timeout for {FormatPlayerName(evt.Thrower)}",
+        //EventType.MidpointTimeoutOpponent => $"Midpoint timeout for opponent {FormatPlayerName(evt.Thrower)}",
+        //EventType.BetweenPointTimeoutOpponent => $"Between point timeout for opponent {FormatPlayerName(evt.Thrower)}",
+        EventType.PullInbounds => $"Pull inbounds by {FormatPlayerName(evt.Puller)}",
+        EventType.PullOutOfBounds => $"Pull out of bounds by {FormatPlayerName(evt.Puller)}",
+        EventType.OffsidesRecording => $"Offside for {FormatPlayerName(evt.Thrower)}",
+        //EventType.OffsidesOpponent => $"Offside for opponent {FormatPlayerName(evt.Thrower)}",
+        EventType.Block => $"Block by {FormatPlayerName(evt.Defender)}",
+        EventType.CallahanThrownByOpponent => $"Callahan by {FormatPlayerName(evt.Receiver)}",
+        EventType.Pass => $"{distance} yard pass from {FormatPlayerName(evt.Thrower)} to {FormatPlayerName(evt.Receiver)}",
+        EventType.Goal => $"{distance} yard GOAL from {FormatPlayerName(evt.Thrower)} to {FormatPlayerName(evt.Receiver)}",
+        EventType.Drop => $"Drop by {FormatPlayerName(evt.Thrower)}",
+        EventType.DroppedPull => $"Dropped pull by {FormatPlayerName(evt.Puller)}",
+        EventType.ThrowawayByRecording => $"Throwaway by {FormatPlayerName(evt.Thrower)}",
+        EventType.PenaltyRecording => $"Foul by {FormatPlayerName(evt.Player)}",
         //EventType.CallahanThrownByRecording => $"Callahan thrown by {evt.Thrower}",
-        EventType.StallAgainstRecording => $"{evt.Defender} stalled",
-        EventType.Injury => $"{evt.Player} injured on the play",
-        EventType.PlayerMisconductFoul => $"{evt.Player} foul",
-        EventType.PlayerEjected => $"{evt.Player} ejected from game",
+        EventType.StallAgainstRecording => $"{FormatPlayerName(evt.Defender)} stalled",
+        EventType.Injury => $"{FormatPlayerName(evt.Player)} injured on the play",
+        EventType.PlayerMisconductFoul => $"Technical foul on {FormatPlayerName(evt.Player)}",
+        EventType.PlayerEjected => $"{FormatPlayerName(evt.Player)} ejected from game",
         EventType.EndQ1 => "End of Q1",
         EventType.Halftime => "Halftime",
         EventType.EndQ3 => "End of Q3",
@@ -315,5 +328,17 @@ public class UfaGameEventService : BackgroundService
         var dy = y2.Value - y1.Value;
 
         return (int)Math.Sqrt(dx * dx + dy * dy);
+    }
+
+    private static string FormatPlayerName(string? playerName)
+    {
+        if (string.IsNullOrWhiteSpace(playerName) || playerName.Length < 2)
+        {
+            return "unknown";
+        }
+
+        var name = playerName.Substring(1);
+
+        return char.ToUpper(name[0]) + name.Substring(1);
     }
 }

@@ -13,6 +13,7 @@ public class GameStateService
     private readonly ConcurrentQueue<GameEventViewModel> _recentGameEventQueue = new();
     private readonly List<GameEventViewModel> _allGameEvents = new();
 
+    private string? _currentGameId;
     private GameState _currentGameState;
     private int _gameEventId = 1;
 
@@ -21,6 +22,22 @@ public class GameStateService
     public GameStateService()
     {
         _currentGameState = InitializeGameState();
+    }
+
+    public void SetCurrentGameId(string gameId)
+    {
+        lock (_lockObject)
+        {
+            _currentGameId = gameId;
+        }
+    }
+
+    public string? GetCurrentGameId()
+    {
+        lock (_lockObject)
+        {
+            return _currentGameId;
+        }
     }
 
     public GameState GetCurrentGameState()

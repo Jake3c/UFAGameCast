@@ -25,6 +25,7 @@ builder.Services.AddEndpointsApiExplorer();
 
 // Add backend game state and UFA polling service
 builder.Services.AddSingleton<GameStateService>();
+builder.Services.AddSingleton<UfaGameEventService>();
 builder.Services.AddHttpClient();
 
 //Switch for testing
