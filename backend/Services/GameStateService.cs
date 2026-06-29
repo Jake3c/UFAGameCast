@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Threading.Channels;
 using UFAGameCast.Backend.Models;
 
 namespace UFAGameCast.Backend.Services;
@@ -11,7 +12,9 @@ namespace UFAGameCast.Backend.Services;
 public class GameStateService
 {
     private readonly ConcurrentQueue<GameEventViewModel> _recentGameEventQueue = new();
+    private readonly Channel<GameEventViewModel> _eventChannel = Channel.CreateUnbounded<GameEventViewModel>();
     private readonly List<GameEventViewModel> _allGameEvents = new();
+    private readonly ILogger<GameStateService> _logger;
 
     private string? _currentGameId;
     private GameState _currentGameState;
@@ -19,8 +22,12 @@ public class GameStateService
 
     private readonly object _lockObject = new();
 
-    public GameStateService()
+    public GameStateService(ILogger<GameStateService> logger)
     {
+        _logger = logger;
+
+        _logger.LogInformation("GameStateService CREATED");
+
         _currentGameState = InitializeGameState();
     }
 
@@ -53,6 +60,33 @@ public class GameStateService
         lock (_lockObject)
         {
             _currentGameState = state;
+        }
+    }
+
+    public void PublishPlayEvent(GameEventViewModel playEvent)
+    {
+        _logger.LogInformation("Publishing event: {type}", playEvent.EventType);
+
+        AddPlayEvent(playEvent);
+        _eventChannel.Writer.TryWrite(playEvent);
+    }
+
+    public IAsyncEnumerable<GameEventViewModel> GetEventStream(CancellationToken token)
+    {
+        return _eventChannel.Reader.ReadAllAsync(token);
+    }
+
+
+    public async Task ReplayEventsSlowly(IEnumerable<GameEventViewModel> events, int delayMs = 5000, CancellationToken token = default)
+    {
+        foreach (var evt in events)
+        {
+            if (token.IsCancellationRequested)
+                break;
+
+            PublishPlayEvent(evt);
+
+            await Task.Delay(delayMs, token);
         }
     }
 

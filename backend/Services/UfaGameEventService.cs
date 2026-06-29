@@ -27,14 +27,12 @@ public class UfaGameEventService : BackgroundService
         IConfiguration configuration,
         ILogger<UfaGameEventService> logger)
     {
+        Console.WriteLine("UFA CONSTRUCTOR HIT");
+
         _gameStateService = gameStateService;
         _logger = logger;
         _httpClient = httpClientFactory.CreateClient();
         _baseUrl = configuration["UFA_API_BASE_URL"]?.TrimEnd('/') ?? "https://www.backend.ufastats.com/api/v1";
-
-        //_gameId = configuration["UFA_GAME_ID"] ?? "2026-05-09-SLC-COL";
-        //_gameId = configuration["UFA_GAME_ID"] ?? "2026-06-19-TOR-ORE";
-
         _jsonOptions = new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -47,24 +45,23 @@ public class UfaGameEventService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var gameId = _gameStateService.GetCurrentGameId();
-        if (string.IsNullOrWhiteSpace(gameId))
-        {
-            _logger.LogWarning("UFA_GAME_ID not configured. Service disabled.");
-            await Task.Delay(Timeout.Infinite, stoppingToken);
-            return;
-        }
-
-        _logger.LogInformation("UFA service started for gameId={gameId}", gameId);
-        var a = 0;
+        _logger.LogInformation("UFA service started");
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            var gameId = _gameStateService.GetCurrentGameId();
+
+            if (string.IsNullOrWhiteSpace(gameId))
+            {
+                _logger.LogInformation("Waiting for gameId...");
+                await Task.Delay(1000, stoppingToken);
+                continue;
+            }
+
             try
             {
                 await EnsureTeamCache(stoppingToken);
                 await PollGameCycle(gameId, stoppingToken);
-                Console.WriteLine(a++);
             }
             catch (Exception ex)
             {
@@ -73,8 +70,6 @@ public class UfaGameEventService : BackgroundService
 
             await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
         }
-
-        _logger.LogInformation("UFA service stopped");
     }
 
     // =========================================================
@@ -220,6 +215,7 @@ public class UfaGameEventService : BackgroundService
             EventType.CallahanThrownByRecording,
             EventType.BetweenPointTimeoutOpponent
         };
+
         var mergedEvents = eventsObject.Data.HomeEvents
             .Where(evt => !excludedEventTypes.Contains((EventType)evt.Type))
             .Select((evt, i) => ("home", evt, i))
@@ -232,35 +228,12 @@ public class UfaGameEventService : BackgroundService
             .ThenBy(x => x.Item3)
             .ToList();
 
-        var playHistory = new List<GameEventViewModel>();
+        var replay = mergedEvents
+            .Select(x => CreatePlayEvent(x.Item2))
+            .Where(x => x != null)!
+            .ToList();
 
-        foreach (var (source, evt, index) in mergedEvents)
-        {
-            var playEvent = CreatePlayEvent(evt);
-
-            if (playEvent == null)
-                continue;
-
-            playHistory.Add(playEvent);
-
-            //
-            // Still track newly-seen events for logging/debugging
-            //
-            var signature = BuildSignature(source, index, evt);
-
-            if (_processedEvents.Add(signature))
-            {
-                _logger.LogInformation(
-                    "Processed NEW event {type}: {desc}",
-                    evt.Type,
-                    playEvent.Description);
-            }
-        }
-
-        //
-        // Replace the entire history every poll
-        //
-        _gameStateService.SetPlayHistory(playHistory);
+        await _gameStateService.ReplayEventsSlowly(replay, 5000, token);
     }
 
     // =========================================================

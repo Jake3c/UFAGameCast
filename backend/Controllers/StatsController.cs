@@ -11,7 +11,6 @@ namespace UFAGameCast.Backend.Controllers;
 public class StatsController : ControllerBase
 {
     private readonly GameStateService _gameStateService;
-    private readonly UfaGameEventService _ufaGameEventService;
     private readonly ILogger<StatsController> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -25,11 +24,9 @@ public class StatsController : ControllerBase
 
     public StatsController(
         GameStateService gameStateService,
-        UfaGameEventService ufaGameEventService,
         ILogger<StatsController> logger)
     {
         _gameStateService = gameStateService;
-        _ufaGameEventService = ufaGameEventService;
         _logger = logger;
     }
 
@@ -41,7 +38,12 @@ public class StatsController : ControllerBase
     public async Task<IActionResult> GetSnapshot([FromQuery] string gameId)
     {
         _gameStateService.SetCurrentGameId(gameId);
-        await _ufaGameEventService.RefreshGame(gameId);
+        var history = _gameStateService.GetAllPlayEvents();
+
+        _ = Task.Run(async () =>
+        {
+            await _gameStateService.ReplayEventsSlowly(history, 5000);
+        });
 
         return Ok(new
         {
@@ -50,10 +52,6 @@ public class StatsController : ControllerBase
         });
     }
 
-    /// <summary>
-    /// SSE endpoint for live updates.
-    /// Sends game state updates and newly-added play events.
-    /// </summary>
     [HttpGet("live")]
     public async Task GetLiveStats(CancellationToken cancellationToken)
     {
@@ -64,68 +62,23 @@ public class StatsController : ControllerBase
 
         _logger.LogInformation("SSE client connected");
 
-        try
+        // send initial state once
+        await SendEvent(
+            Response,
+            "gamestate",
+            _gameStateService.GetCurrentGameState(),
+            cancellationToken);
+
+        // stream live events
+        await foreach (var play in _gameStateService
+            .GetEventStream(cancellationToken)
+            .WithCancellation(cancellationToken))
         {
-            // Send current state immediately
             await SendEvent(
                 Response,
-                "gamestate",
-                _gameStateService.GetCurrentGameState(),
+                "playevent",
+                play,
                 cancellationToken);
-
-            // Don't replay history.
-            // Client gets history from /snapshot.
-            var lastPlayCount = _gameStateService
-                .GetAllPlayEvents()
-                .Count;
-
-            var lastGameStatePush = DateTime.UtcNow;
-
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                // Push game state every 2 seconds
-                if (DateTime.UtcNow - lastGameStatePush >= TimeSpan.FromSeconds(2))
-                {
-                    await SendEvent(
-                        Response,
-                        "gamestate",
-                        _gameStateService.GetCurrentGameState(),
-                        cancellationToken);
-
-                    lastGameStatePush = DateTime.UtcNow;
-                }
-
-                // Push any new play events
-                var plays = _gameStateService.GetAllPlayEvents();
-
-                if (plays.Count > lastPlayCount)
-                {
-                    foreach (var play in plays.Skip(lastPlayCount))
-                    {
-                        await SendEvent(
-                            Response,
-                            "playevent",
-                            play,
-                            cancellationToken);
-                    }
-
-                    lastPlayCount = plays.Count;
-                }
-
-                await Task.Delay(500, cancellationToken);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            _logger.LogInformation("SSE client disconnected");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error in SSE stream");
-        }
-        finally
-        {
-            await Response.CompleteAsync();
         }
     }
 

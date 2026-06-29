@@ -1,208 +1,166 @@
 import { GameState, PlayEvent, StatsStreamEvent } from '../types/api';
 
-/**
- * Manages:
- * 1. Snapshot load (initial full game state + history)
- * 2. SSE live updates (incremental updates only)
- */
 export class StatsService {
   private gameId = '';
   private eventSource: EventSource | null = null;
 
-  private listeners: Array<(event: StatsStreamEvent) => void> = [];
+  private listeners: Set<(event: StatsStreamEvent) => void> = new Set();
 
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 10;
   private reconnectDelay = 1000;
+  private reconnectTimeout: number | null = null;
 
   private readonly apiUrl: string;
-
-  setGameId(gameId: string){
-    this.gameId = gameId;
-  }
 
   constructor(apiUrl: string = import.meta.env.VITE_API_URL || 'http://localhost:5000') {
     this.apiUrl = apiUrl;
   }
 
-  // =========================================================
-  // SNAPSHOT (INITIAL LOAD)
-  // =========================================================
+  setGameId(gameId: string) {
+    this.gameId = gameId;
+  }
+
+  // =========================
+  // SNAPSHOT
+  // =========================
 
   async getSnapshot(): Promise<{
     gameState: GameState;
     playHistory: PlayEvent[];
   }> {
-    const res = await fetch(`${this.apiUrl}/api/stats/snapshot?gameId=${encodeURIComponent(this.gameId)}`);
+    const res = await fetch(
+      `${this.apiUrl}/api/stats/snapshot?gameId=${encodeURIComponent(this.gameId)}`
+    );
 
-    if (!res.ok) {
-      throw new Error(`Failed to load snapshot: ${res.status}`);
-    }
+    if (!res.ok) throw new Error(`Failed snapshot: ${res.status}`);
 
     return await res.json();
   }
 
-  /**
-   * Optional convenience method:
-   * snapshot + connect in one call
-   */
-  async initialize(): Promise<{
-    gameState: GameState;
-    playHistory: PlayEvent[];
-  }> {
+  async initialize() {
     const snapshot = await this.getSnapshot();
     await this.connect();
     return snapshot;
   }
 
-  // =========================================================
-  // SSE CONNECTION
-  // =========================================================
+  // =========================
+  // SSE
+  // =========================
 
   connect(): Promise<void> {
+    // prevent double connections
+    if (this.eventSource) {
+      this.disconnect();
+    }
+
     return new Promise((resolve, reject) => {
-      try {
-        const url = `${this.apiUrl}/api/stats/live`;
-        this.eventSource = new EventSource(url);
+      const url = `${this.apiUrl}/api/stats/live`;
 
-        this.eventSource.onopen = () => {
-          this.reconnectAttempts = 0;
-          console.log('Connected to stats stream:', url);
-          resolve();
-        };
+      this.eventSource = new EventSource(url);
 
-        this.eventSource.addEventListener('gamestate', (event: MessageEvent) => {
-          this.safeNotify('gamestate', event.data, this.parseGameState);
+      this.eventSource.onopen = () => {
+        this.reconnectAttempts = 0;
+        console.log('SSE connected');
+        resolve();
+      };
+
+      this.eventSource.addEventListener('gamestate', (event: MessageEvent) => {
+        this.emit({
+          type: 'gamestate',
+          data: JSON.parse(event.data),
         });
+      });
 
-        this.eventSource.addEventListener('playevent', (event: MessageEvent) => {
-          this.safeNotify('playevent', event.data, this.parsePlayEvent);
+      this.eventSource.addEventListener('playevent', (event: MessageEvent) => {
+        this.emit({
+          type: 'playevent',
+          data: JSON.parse(event.data),
         });
+      });
 
-        this.eventSource.onerror = () => {
-          console.error('SSE connection error');
-          this.handleConnectionError(reject);
-        };
-      } catch (err) {
-        reject(err);
-      }
+      this.eventSource.onerror = () => {
+        console.error('SSE error');
+        this.handleReconnect(reject);
+      };
     });
   }
 
-  // =========================================================
+  // =========================
   // SUBSCRIPTIONS
-  // =========================================================
+  // =========================
 
   subscribe(listener: (event: StatsStreamEvent) => void): () => void {
-    this.listeners.push(listener);
+    this.listeners.add(listener);
 
     return () => {
-      const index = this.listeners.indexOf(listener);
-      if (index > -1) {
-        this.listeners.splice(index, 1);
-      }
+      this.listeners.delete(listener);
     };
   }
 
-  // =========================================================
-  // CONNECTION MANAGEMENT
-  // =========================================================
-
-  disconnect(): void {
-    if (this.eventSource) {
-      this.eventSource.close();
-      this.eventSource = null;
-      console.log('Disconnected from stats stream');
-    }
-  }
-
-  isConnected(): boolean {
-    return (
-      this.eventSource !== null &&
-      this.eventSource.readyState === EventSource.OPEN
-    );
-  }
-
-  private handleConnectionError(reject?: (reason?: any) => void): void {
-    this.disconnect();
-
-    if (this.reconnectAttempts < this.maxReconnectAttempts) {
-      this.reconnectAttempts++;
-
-      const delay =
-        this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1);
-
-      console.log(
-        `Reconnecting (${this.reconnectAttempts}/${this.maxReconnectAttempts}) in ${delay}ms`
-      );
-
-      setTimeout(() => {
-        this.connect().catch((err) => {
-          console.error('Reconnection failed:', err);
-
-          if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-            reject?.(err);
-          } else {
-            this.handleConnectionError(reject);
-          }
-        });
-      }, delay);
-    } else {
-      reject?.(new Error('Failed to connect to stats stream'));
-    }
-  }
-
-  // =========================================================
-  // EVENT DISPATCH
-  // =========================================================
-
-  private notifyListeners(event: StatsStreamEvent): void {
-    this.listeners.forEach((listener) => {
+  private emit(event: StatsStreamEvent) {
+    for (const listener of this.listeners) {
       try {
         listener(event);
-      } catch (err) {
-        console.error('Listener error:', err);
+      } catch (e) {
+        console.error('listener error', e);
       }
-    });
-  }
-
-  private safeNotify<T>(
-    type: StatsStreamEvent['type'],
-    data: string,
-    parser: (d: string) => T
-  ) {
-    try {
-      const parsed = parser(data);
-
-      this.notifyListeners({
-        type,
-        data: parsed,
-      } as StatsStreamEvent);
-    } catch (err) {
-      console.error(`Failed to parse ${type}:`, err);
     }
   }
 
-  // =========================================================
-  // PARSERS
-  // =========================================================
+  // =========================
+  // CLEANUP (THIS FIXES YOUR ISSUE)
+  // =========================
 
-  private parseGameState(data: string): GameState {
-    return JSON.parse(data);
+  disconnect() {
+    if (this.eventSource) {
+      console.log('SSE disconnected');
+      this.eventSource.close();
+      this.eventSource = null;
+    }
+
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+
+    this.reconnectAttempts = 0;
   }
 
-  private parsePlayEvent(data: string): PlayEvent {
-    return JSON.parse(data);
+  reset() {
+    this.disconnect();
+    this.listeners.clear(); // 🔥 THIS fixes duplicate listeners
+  }
+
+  // =========================
+  // RECONNECT
+  // =========================
+
+  private handleReconnect(reject?: (reason?: any) => void) {
+    this.disconnect();
+
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      reject?.(new Error('SSE failed'));
+      return;
+    }
+
+    this.reconnectAttempts++;
+
+    const delay = this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1);
+
+    this.reconnectTimeout = window.setTimeout(() => {
+      this.connect().catch(err => {
+        console.error('Reconnect failed', err);
+        this.handleReconnect(reject);
+      });
+    }, delay);
   }
 }
 
-// =========================================================
-// SINGLETON
-// =========================================================
-
+// singleton
 let statsService: StatsService | null = null;
 
-export function getStatsService(): StatsService {
+export function getStatsService() {
   if (!statsService) {
     statsService = new StatsService();
   }

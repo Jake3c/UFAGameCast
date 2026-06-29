@@ -1,8 +1,9 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import HomeFieldLogo from '../resources/logo-team-MAD.png'
+import { getTeamLogo } from '../utils/teamLogos';
 
 interface FieldVisualizationProps {
+  homeTeam: string;
   discPosition?: { x: number; y: number };
   width?: number;
   height?: number;
@@ -13,11 +14,14 @@ interface FieldVisualizationProps {
  */
 export const FieldVisualization: React.FC<FieldVisualizationProps> = ({
   discPosition,
+  homeTeam,
 }) => {
   // SVG coordinates: 120 units wide x 53 units tall with 20-unit endzones
   const fieldWidth = 120;
   const fieldHeight = 53;
   const endzoneDepth = 20;
+
+  var homeTeamLogo = getTeamLogo(homeTeam);
 
   return (
     <div className="field-visualization-container">
@@ -46,7 +50,7 @@ export const FieldVisualization: React.FC<FieldVisualizationProps> = ({
 
         {/* Home field logo */}
         <image
-            href={HomeFieldLogo}
+            href={homeTeamLogo}
             x={fieldWidth / 2 - 20}
             y={fieldHeight / 2 - 20}
             width="40"

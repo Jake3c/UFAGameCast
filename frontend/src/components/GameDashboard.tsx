@@ -12,7 +12,7 @@ import { GameState, PlayEvent } from '../types/api';
 export const GameDashboard: React.FC = () => {
   const stats = getStatsService();
 
-  const [gameId, setGameId] = useState<string>('');
+  const [gameId, setGameId] = useState<string>('2026-06-27-MAD-IND');
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [recentPlays, setRecentPlays] = useState<PlayEvent[]>([]);
@@ -81,7 +81,6 @@ export const GameDashboard: React.FC = () => {
             type="text"
             value={gameId}
             onChange={(e) => setGameId(e.target.value)}
-            placeholder="2026-05-09-SLC-COL"
             className="w-full border rounded px-3 py-2 mb-3"
             />
 
@@ -133,7 +132,7 @@ export const GameDashboard: React.FC = () => {
       {/* Main Layout */}
       <div className="dashboard-content">
         <div className="field-section">
-          <FieldVisualization discPosition={gameState?.discPosition} />
+          <FieldVisualization homeTeam={gameState?.homeTeamName ??  ''} discPosition={gameState?.discPosition} />
         </div>
 
         <div className="plays-section">
