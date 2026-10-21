@@ -2,7 +2,11 @@ namespace UFAGameCast.Backend.Models;
 
 public class GameEvent
 {
-    public long Timestamp { get; set; }
+    public int Id { get; set; }
+
+    public bool IsHomeTeam { get; set; }
+
+    public long? Timestamp { get; set; }
 
     public EventType Type { get; set; }
 

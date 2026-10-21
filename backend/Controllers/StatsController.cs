@@ -35,8 +35,7 @@ public class StatsController : ControllerBase
     }
 
     /// <summary>
-    /// Initial load endpoint.
-    /// Returns the current game state and complete play history.
+    /// Returns game metadata and all available events merged by their Unix timestamp.
     /// </summary>
     [HttpGet("snapshot")]
     public async Task<IActionResult> GetSnapshot(
@@ -47,8 +46,8 @@ public class StatsController : ControllerBase
 
         try
         {
-            var gameState = await _ufaGameEventService.GetGameStateAsync(gameId, cancellationToken);
-            if (!_gameStateService.UpdateGameState(gameId, gameState))
+            var snapshot = await _ufaGameEventService.GetGameSnapshotAsync(gameId, cancellationToken);
+            if (!_gameStateService.UpdateGameSnapshot(gameId, snapshot.GameState, snapshot.PlayHistory))
             {
                 return Conflict(new ProblemDetails
                 {
@@ -60,8 +59,8 @@ public class StatsController : ControllerBase
 
             return Ok(new
             {
-                gameState,
-                playHistory = _gameStateService.GetAllPlayEvents()
+                gameState = snapshot.GameState,
+                gameEvents = snapshot.GameEvents
             });
         }
         catch (KeyNotFoundException)

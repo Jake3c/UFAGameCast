@@ -1,30 +1,30 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { PlayEvent } from '../types/api';
+import { GameEvent } from '../types/api';
+import { getTeamLogo } from '../utils/teamLogos';
+import UfaLogo from '../resources/UFAIcon.png';
 
 interface PlayHistoryProps {
-  plays: PlayEvent[];
-  maxVisible?: number;
+  plays: GameEvent[];
+  homeTeam: string;
+  awayTeam: string;
+  emptyMessage?: string;
 }
 
 /**
- * Renders a scrollable list of recent plays with smooth animations
- * Newest plays appear at the top
+ * Renders the supplied play history in chronological order.
  */
 export const PlayHistory: React.FC<PlayHistoryProps> = ({
   plays,
-  maxVisible = 10,
+  homeTeam,
+  awayTeam,
+  emptyMessage = 'Waiting for plays...',
 }) => {
-  // Ensure newest-first ordering
-  const visiblePlays = [...plays]
-    .slice(-maxVisible)
-    .reverse();
-
   return (
     <div className="w-full h-full overflow-hidden">
       <div className="w-full flex flex-col">
         <AnimatePresence initial={false} mode="popLayout">
-          {visiblePlays.map((play) => (
+          {plays.map((play) => (
             <motion.div
               key={play.id}
               layout
@@ -34,14 +34,14 @@ export const PlayHistory: React.FC<PlayHistoryProps> = ({
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
               className="w-full"
             >
-              <PlayHistoryItem play={play} />
+              <PlayHistoryItem play={play} homeTeam={homeTeam} awayTeam={awayTeam} />
             </motion.div>
           ))}
         </AnimatePresence>
 
-        {visiblePlays.length === 0 && (
+        {plays.length === 0 && (
           <div className="p-4 text-sm text-gray-400 text-center">
-            Waiting for plays...
+            {emptyMessage}
           </div>
         )}
       </div>
@@ -53,89 +53,74 @@ export const PlayHistory: React.FC<PlayHistoryProps> = ({
 // ITEM
 // =========================================================
 
-function PlayHistoryItem({ play }: { play: PlayEvent }) {
-
-  const barColor = getEventColor(play.eventType);
-
-  if(isEndOfPeriodEvent(play.eventType)) {
-    return (
-      <div className="flex w-full items-stretch pl-4 txt-lg pb-1 font-semibold bg-slate-800 text-white my-2">
-        {play.description}
-      </div>
-    );
-  }
+function PlayHistoryItem({
+  play,
+  homeTeam,
+  awayTeam,
+}: {
+  play: GameEvent;
+  homeTeam: string;
+  awayTeam: string;
+}) {
+  const isGoal = play.type === 'goal';
+  const isStartingLine = play.type === 'startDPoint' || play.type === 'startOPoint';
+  const isEndOfPeriod = isEndOfPeriodEvent(play.type);
+  const teamName = play.isHomeTeam ? homeTeam : awayTeam;
+  const teamLogo = isEndOfPeriod ? UfaLogo : getTeamLogo(teamName);
+  const teamLogoAlt = isEndOfPeriod ? 'UFA logo' : `${teamName} logo`;
 
   return (
-    <div className={`flex items-stretch min-h-[32px] rounded-md py-0.5 bg-gray-200 mx-1 my-0.5 border-l-4 ${barColor}`}>
-
-
-      {/* Description */}
-      <div className="flex-1 px-3 py-2 text-xs min-w-52">
-        {play.description}
-      </div>
-      
-      {/* Code */}
-      <div className="flex-1 px-3 py-2 text-xs">
-        {play.eventType}
-      </div>
-
-      {/* Code */}
-      <div className="flex-1 px-3 py-2 text-xs">
-        {play.initiatorName}
-      </div>
-
-      {/* Time */}
-      <div className="px-3 py-2 text-xs text-right text-gray-400 tabular-nums whitespace-nowrap">
-        {play.time}
-      </div>
-    </div>
+    <article className={`play-event-row play-event-row--${getEventTone(play.type)}${isGoal ? ' play-event-row--goal' : ''}`}>
+      <span className="play-event-type-group">
+        {teamLogo && <img className="play-event-team-logo" src={teamLogo} alt={teamLogoAlt} />}
+        <span className="play-event-type">{isGoal ? 'GOAL' : play.type}</span>
+      </span>
+      <span className="play-event-details">
+        {isGoal ? (
+          <>
+            <strong>{play.thrower ?? ''}</strong>
+            {' to '}
+            <strong>{play.receiver ?? ''}</strong>
+          </>
+        ) : play.type === 'pass' ? (
+          `${play.thrower ?? ''} to ${play.receiver ?? ''}`
+        ) : play.type === 'throwawayByRecording' ? (
+          play.thrower ?? ''
+        ) : play.type === 'callahanThrownByOpponent' ? (
+          play.defender ?? ''
+        ) : play.type === 'callahanThrownByRecording' ? (
+          play.thrower ?? ''
+        ) : play.type === 'block' ? (
+          play.defender ?? ''
+        ) : play.type === 'drop' ? (
+          play.receiver ?? ''
+        ) : play.type === 'pullInbounds' ? (
+          play.puller ?? ''
+        ) : isStartingLine ? (
+          (play.line ?? []).join(', ')
+        ) : null}
+      </span>
+    </article>
   );
 }
 
-function isEndOfPeriodEvent(eventType: string){
-    return eventType === "endQ1" || eventType === "endQ3" || eventType === "endRegulation" || eventType === "endOT1" || eventType === "endOT2" || eventType === "halftime";
+function isEndOfPeriodEvent(eventType: string) {
+  return [
+    'endQ1',
+    'halftime',
+    'endQ3',
+    'endRegulation',
+    'endOT1',
+    'endOT2',
+  ].includes(eventType);
 }
 
-function getEventColor(eventType: string){
-
-  // The commented out rows represent the full list of possible eventTypes, but we should not be receiving any eventTypes
-  // that would result in "black"
-  const eventColors: Record<string, string> = {
-    //startDPoint : 'bg-black',
-    //startOPoint : 'bg-black',
-    midpointTimeoutRecording : 'border-l-yellow-500',
-    betweenPointTimeoutRecording : 'border-l-yellow-500',
-    midpointTimeoutOpponent : 'border-l-yellow-500',
-    //betweenPointTimeoutOpponent : 'bg-black',
-    pullInbounds : 'border-l-orange-500',
-    pullOutOfBounds : 'border-l-orange-300',
-    offsidesRecording : 'border-l-pink-500',
-    offsidesOpponent : 'border-l-pink-500',
-    block : 'border-l-blue-500',
-    callahanThrownByOpponent : 'border-l-gold',
-    //throwawayByOpponent : 'bg-black',
-    //stallAgainstOpponent : 'bg-black',
-    //scoreByOpponent : 'bg-black',
-    penaltyRecording : 'border-l-pink-500',
-    //penaltyOpponent : 'bg-black',
-    pass : 'border-l-gray-500',
-    goal : 'border-l-green-500',
-    drop : 'border-l-red-500',
-    droppedPull : 'border-l-red-500',
-    throwawayByRecording : 'border-l-red-500',
-    //callahanThrownByRecording : 'bg-black',
-    stallAgainstRecording : 'border-l-pink-500',
-    injury : 'border-l-yellow-500',
-    playerMisconductFoul : 'border-l-red-500',
-    playerEjected : 'border-l-red-800',
-    endQ1 : 'border-l-teal-500',
-    halftime : 'border-l-teal-500',
-    endQ3 : 'border-l-teal-500',
-    endRegulation : 'border-l-teal-500',
-    endOT1 : 'border-l-teal-500',
-    endOT2 : 'border-l-teal-500',
-    delayed : 'border-l-red-500'
-  };
-
-  return eventColors[eventType] ?? 'bg-black';
+function getEventTone(eventType: string) {
+  if (eventType === 'callahanThrownByRecording') return 'callahan-recording';
+  if (eventType === 'callahanThrownByOpponent') return 'callahan-opponent';
+  if (eventType === 'goal') return 'score';
+  if (eventType.toLowerCase().includes('penalty')) return 'penalty';
+  if (eventType.toLowerCase().includes('throwaway')) return 'throwaway';
+  if (eventType === 'block') return 'block';
+  return 'default';
 }

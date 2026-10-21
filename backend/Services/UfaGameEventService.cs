@@ -16,6 +16,7 @@ public class UfaGameEventService : BackgroundService
     // -------------------------
 
     private readonly HashSet<string> _processedEvents = new();
+    private readonly object _processedEventsLock = new();
 
     private readonly Dictionary<string, Team> _teamCache = new();
     private DateTime _teamCacheLastRefresh = DateTime.MinValue;
@@ -116,7 +117,12 @@ public class UfaGameEventService : BackgroundService
             return;
         }
 
-        await ProcessEvents(eventsResponse, updatedGameState, token);
+        if (!updatedGameState.IsActive)
+        {
+            return;
+        }
+
+        await ProcessEvents(gameId, eventsResponse, token);
     }
 
     // =========================================================
@@ -156,6 +162,75 @@ public class UfaGameEventService : BackgroundService
         }
 
         return BuildGameState(gameData);
+    }
+
+    public async Task<(
+        GameState GameState,
+        IReadOnlyList<GameEvent> GameEvents,
+        IReadOnlyList<GameEventViewModel> PlayHistory)> GetGameSnapshotAsync(
+        string gameId,
+        CancellationToken cancellationToken)
+    {
+        await EnsureTeamCache(cancellationToken);
+
+        var gameUrl = $"{_baseUrl}/games?gameIDs={Uri.EscapeDataString(gameId)}";
+        using var gameResponse = await _httpClient.GetAsync(gameUrl, cancellationToken);
+        if (!gameResponse.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException(
+                "The UFA games API returned an unsuccessful response.",
+                null,
+                gameResponse.StatusCode);
+        }
+
+        var gameResult = await gameResponse.Content.ReadFromJsonAsync<GameResponse>(
+            _jsonOptions,
+            cancellationToken);
+        var gameData = gameResult?.Data.FirstOrDefault(game =>
+            string.Equals(game.GameID, gameId, StringComparison.OrdinalIgnoreCase));
+
+        if (gameData is null)
+        {
+            throw new KeyNotFoundException($"No game was found with ID '{gameId}'.");
+        }
+
+        var gameState = BuildGameState(gameData);
+        if (IsUpcomingOrUnplayed(gameState.GameStatus))
+        {
+            return (gameState, Array.Empty<GameEvent>(), Array.Empty<GameEventViewModel>());
+        }
+
+        var eventsUrl = $"{_baseUrl}/gameEvents?gameID={Uri.EscapeDataString(gameId)}";
+        using var eventsResponse = await _httpClient.GetAsync(eventsUrl, cancellationToken);
+        if (!eventsResponse.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException(
+                "The UFA game events API returned an unsuccessful response.",
+                null,
+                eventsResponse.StatusCode);
+        }
+
+        var eventsResult = await eventsResponse.Content.ReadFromJsonAsync<GameEventsResponse>(
+            _jsonOptions,
+            cancellationToken);
+        var gameEvents = MergeEventsByTimestamp(eventsResult?.Data);
+        var mappedEvents = gameEvents
+            .Select((item, index) =>
+            {
+                item.Event.Id = index + 1;
+                return CreatePlayEvent(item.Event, index + 1);
+            })
+            .ToList();
+
+        lock (_processedEventsLock)
+        {
+            foreach (var item in gameEvents)
+            {
+                _processedEvents.Add(BuildSignature(gameId, item.Source, item.SourceIndex, item.Event));
+            }
+        }
+
+        return (gameState, gameEvents.Select(item => item.Event).ToList(), mappedEvents);
     }
 
     private async Task<GameData> ExtractGameData(HttpResponseMessage response, CancellationToken token)
@@ -230,65 +305,130 @@ public class UfaGameEventService : BackgroundService
     // EVENT PROCESSING
     // =========================================================
 
-    private async Task ProcessEvents(HttpResponseMessage response, GameState state, CancellationToken token)
+    private async Task ProcessEvents(string gameId, HttpResponseMessage response, CancellationToken token)
     {
         var eventsObject = await response.Content.ReadFromJsonAsync<GameEventsResponse>(_jsonOptions, token);
 
         if (eventsObject?.Data == null)
             return;
 
-        var excludedEventTypes = new HashSet<EventType>
+        foreach (var item in MergeEventsByTimestamp(eventsObject.Data))
         {
-            EventType.StartDPoint,
-            EventType.StartOPoint,
-            EventType.ThrowawayByOpponent,
-            EventType.StallAgainstOpponent,
-            EventType.ScoreByOpponent,
-            EventType.PenaltyOpponent,
-            EventType.CallahanThrownByRecording,
-            EventType.BetweenPointTimeoutOpponent
-        };
+            var signature = BuildSignature(gameId, item.Source, item.SourceIndex, item.Event);
+            bool isNew;
+            lock (_processedEventsLock)
+            {
+                isNew = _processedEvents.Add(signature);
+            }
 
-        var mergedEvents = eventsObject.Data.HomeEvents
-            .Where(evt => !excludedEventTypes.Contains((EventType)evt.Type))
-            .Select((evt, i) => ("home", evt, i))
-            .Concat(
-                eventsObject.Data.AwayEvents
-                    .Where(evt => !excludedEventTypes.Contains((EventType)evt.Type))
-                    .Select((evt, i) => ("away", evt, i))
-            )
-            .OrderBy(x => x.Item2.Timestamp)
-            .ThenBy(x => x.Item3)
-            .ToList();
+            if (!isNew)
+            {
+                continue;
+            }
 
-        var replay = mergedEvents
-            .Select(x => CreatePlayEvent(x.Item2))
-            .Where(x => x != null)!
-            .ToList();
-
-        await _gameStateService.ReplayEventsSlowly(replay, 5000, token);
+            var play = CreatePlayEvent(item.Event, 0);
+            if (play is not null)
+            {
+                _gameStateService.PublishPlayEvent(gameId, play);
+            }
+        }
     }
 
     // =========================================================
-    // HELPERS (UNCHANGED LOGIC)
+    // EVENT MAPPING AND ORDERING
     // =========================================================
 
-    private static string BuildSignature(string source, int index, GameEvent evt)
-        => string.Join('|', source, index, evt.Type, evt.Time?.ToString() ?? "");
+    private static string BuildSignature(string gameId, string source, int index, GameEvent evt)
+        => string.Join('|', gameId, source, index, evt.Type, evt.Time?.ToString() ?? "");
 
-    private static GameEventViewModel? CreatePlayEvent(GameEvent evt)
+    private static bool IsUpcomingOrUnplayed(string status) =>
+        string.Equals(status, "Upcoming", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(status, "Postponed", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(status, "Abandoned", StringComparison.OrdinalIgnoreCase);
+
+    private static List<TimedGameEvent> MergeEventsByTimestamp(GameEventsData? data)
+    {
+        if (data is null)
+        {
+            return [];
+        }
+
+        // Put events without a timestamp last and use source/index to make ties deterministic.
+        var events = data.HomeEvents
+            .Select((gameEvent, index) => new TimedGameEvent(NormalizeEvent(gameEvent, true), "home", index))
+            .Concat(data.AwayEvents.Select((gameEvent, index) => new TimedGameEvent(NormalizeEvent(gameEvent, false), "away", index)))
+            .Where(item => item.Event.Type is not (
+                EventType.ScoreByOpponent or
+                EventType.ThrowawayByOpponent or
+                EventType.MidpointTimeoutOpponent or
+                EventType.BetweenPointTimeoutOpponent))
+            .ToList();
+
+        var latestEndOfPeriodEvents = events
+            .Where(item => IsEndOfPeriodEvent(item.Event.Type))
+            .GroupBy(item => item.Event.Type)
+            .Select(group => group
+                .OrderBy(item => item.Event.Timestamp.HasValue ? 0 : 1)
+                .ThenByDescending(item => item.Event.Timestamp)
+                .ThenBy(item => item.Source, StringComparer.Ordinal)
+                .ThenBy(item => item.SourceIndex)
+                .First());
+
+        return events
+            .Where(item => !IsEndOfPeriodEvent(item.Event.Type))
+            .Concat(latestEndOfPeriodEvents)
+            .OrderBy(item => item.Event.Timestamp.HasValue ? 0 : 1)
+            .ThenBy(item => item.Event.Timestamp)
+            .ThenBy(item => item.Source, StringComparer.Ordinal)
+            .ThenBy(item => item.SourceIndex)
+            .ToList();
+    }
+
+    private static bool IsEndOfPeriodEvent(EventType eventType) =>
+        eventType is
+            EventType.EndQ1 or
+            EventType.Halftime or
+            EventType.EndQ3 or
+            EventType.EndRegulation or
+            EventType.EndOT1 or
+            EventType.EndOT2;
+
+    private static GameEvent NormalizeEvent(GameEvent gameEvent, bool isHomeTeam)
+    {
+        gameEvent.IsHomeTeam = isHomeTeam;
+
+        if (gameEvent.Type == EventType.PenaltyOpponent)
+        {
+            gameEvent.IsHomeTeam = !gameEvent.IsHomeTeam;
+            gameEvent.Type = EventType.PenaltyRecording;
+        }
+
+        return gameEvent;
+    }
+
+    private static GameEventViewModel CreatePlayEvent(GameEvent evt, int id)
     {
         var distance = CalculateDistance(evt.ThrowerX, evt.ThrowerY, evt.ReceiverX, evt.ReceiverY);
         var description = BuildDescription(evt, distance);
-        if (string.IsNullOrWhiteSpace(description)) return null;
 
         return new GameEventViewModel
         {
+            Id = id,
             EventType = evt.Type,
+            Time = evt.Time?.ToString() ?? string.Empty,
+            Timestamp = evt.Timestamp,
+            InitiatorName = evt.Thrower ?? string.Empty,
+            ReceiverName = evt.Receiver,
+            Distance = distance,
             Description = description,
-            Time = evt.Time.ToString() ?? ""
+            SourceEvent = evt
         };
     }
+
+    private sealed record TimedGameEvent(
+        GameEvent Event,
+        string Source,
+        int SourceIndex);
 
     private static string BuildDescription(GameEvent evt, int? distance) => evt.Type switch
     {

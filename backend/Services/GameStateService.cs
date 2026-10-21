@@ -44,6 +44,7 @@ public class GameStateService
             _currentGameState = InitializeGameState();
             _allGameEvents.Clear();
             _recentGameEventQueue.Clear();
+            _gameEventId = 1;
 
             while (_eventChannel.Reader.TryRead(out _))
             {
@@ -81,12 +82,58 @@ public class GameStateService
         }
     }
 
-    public void PublishPlayEvent(GameEventViewModel playEvent)
+    public bool UpdateGameSnapshot(
+        string gameId,
+        GameState state,
+        IReadOnlyList<GameEventViewModel> gameEvents)
     {
-        _logger.LogInformation("Publishing event: {type}", playEvent.EventType);
+        lock (_lockObject)
+        {
+            if (!string.Equals(_currentGameId, gameId, StringComparison.Ordinal))
+            {
+                return false;
+            }
 
-        AddPlayEvent(playEvent);
-        _eventChannel.Writer.TryWrite(playEvent);
+            _currentGameState = state;
+            _allGameEvents.Clear();
+            _recentGameEventQueue.Clear();
+            _gameEventId = 1;
+
+            while (_eventChannel.Reader.TryRead(out _))
+            {
+            }
+
+            foreach (var gameEvent in gameEvents)
+            {
+                gameEvent.Id = _gameEventId++;
+
+                _allGameEvents.Add(gameEvent);
+                _recentGameEventQueue.Enqueue(gameEvent);
+
+                while (_recentGameEventQueue.Count > 50)
+                {
+                    _recentGameEventQueue.TryDequeue(out _);
+                }
+            }
+
+            return true;
+        }
+    }
+
+    public bool PublishPlayEvent(string gameId, GameEventViewModel playEvent)
+    {
+        lock (_lockObject)
+        {
+            if (!string.Equals(_currentGameId, gameId, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            _logger.LogInformation("Publishing event: {type}", playEvent.EventType);
+            AddPlayEvent(playEvent);
+            _eventChannel.Writer.TryWrite(playEvent);
+            return true;
+        }
     }
 
     public IAsyncEnumerable<GameEventViewModel> GetEventStream(CancellationToken token)
@@ -95,19 +142,6 @@ public class GameStateService
     }
 
 
-    public async Task ReplayEventsSlowly(IEnumerable<GameEventViewModel> events, int delayMs = 5000, CancellationToken token = default)
-    {
-        foreach (var evt in events)
-        {
-            if (token.IsCancellationRequested)
-                break;
-
-            PublishPlayEvent(evt);
-
-            await Task.Delay(delayMs, token);
-        }
-    }
-
     /// <summary>
     /// Adds a newly processed event.
     /// Used by UfaGameEventService when new events arrive.
@@ -115,12 +149,6 @@ public class GameStateService
     public void AddPlayEvent(GameEventViewModel gameEvent)
     {
         gameEvent.Id = _gameEventId++;
-
-        // Preserve existing timestamp if already supplied
-        if (gameEvent.Timestamp == default)
-        {
-            gameEvent.Timestamp = DateTime.UtcNow;
-        }
 
         if (gameEvent.EventType == EventType.StartOPoint ||
             gameEvent.EventType == EventType.StartDPoint)
@@ -144,41 +172,6 @@ public class GameStateService
         while (_recentGameEventQueue.Count > 50)
         {
             _recentGameEventQueue.TryDequeue(out _);
-        }
-    }
-
-    /// <summary>
-    /// Replaces the entire play history.
-    /// Useful when rebuilding from a complete UFA event feed.
-    /// </summary>
-    public void SetPlayHistory(IEnumerable<GameEventViewModel> events)
-    {
-        lock (_lockObject)
-        {
-            _allGameEvents.Clear();
-            _recentGameEventQueue.Clear();
-
-            foreach (var evt in events)
-            {
-                if (evt.Id == 0)
-                {
-                    evt.Id = _gameEventId++;
-                }
-
-                if (evt.Timestamp == default)
-                {
-                    evt.Timestamp = DateTime.UtcNow;
-                }
-
-                _allGameEvents.Add(evt);
-
-                _recentGameEventQueue.Enqueue(evt);
-
-                while (_recentGameEventQueue.Count > 50)
-                {
-                    _recentGameEventQueue.TryDequeue(out _);
-                }
-            }
         }
     }
 

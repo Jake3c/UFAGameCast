@@ -7,15 +7,17 @@ public class GameEventViewModel
 
     public string Time { get; set; } = string.Empty;
 
-    public int InitiatorPlayerId { get; set; }
+    public int? InitiatorPlayerId { get; set; }
     public string InitiatorName { get; set; } = string.Empty;
 
-    public int ReceiverPlayerId { get; set; }
+    public int? ReceiverPlayerId { get; set; }
     public string? ReceiverName { get; set; }
 
     public int? Distance { get; set; }
 
     public string Description { get; set; } = string.Empty;
 
-    public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+    public long? Timestamp { get; set; }
+
+    public GameEvent? SourceEvent { get; set; }
 }

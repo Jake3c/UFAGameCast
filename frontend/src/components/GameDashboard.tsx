@@ -6,7 +6,7 @@ import { TeamTile } from './TeamTile';
 import { TeamGamesPage } from './TeamGamesPage';
 import UfaLogo from '../resources/UFAIcon.png';
 import { getStatsService } from '../services/StatsService';
-import { GameState, PlayEvent } from '../types/api';
+import { GameEvent, GameState } from '../types/api';
 import { getTeamColor, getTeamNames } from '../utils/teamColors';
 import { getTeamLogo } from '../utils/teamLogos';
 
@@ -28,6 +28,17 @@ function getGameFromPath(): string | null {
   } catch {
     return null;
   }
+}
+
+function isEndOfPeriodEvent(eventType: string) {
+  return [
+    'endQ1',
+    'halftime',
+    'endQ3',
+    'endRegulation',
+    'endOT1',
+    'endOT2',
+  ].includes(eventType);
 }
 
 function toTitleCase(value: string) {
@@ -58,7 +69,7 @@ export const GameDashboard: React.FC = () => {
   const [selectedTeamName, setSelectedTeamName] = useState<string | null>(getTeamFromPath);
   const [selectedGameId, setSelectedGameId] = useState<string | null>(getGameFromPath);
   const [gameState, setGameState] = useState<GameState | null>(null);
-  const [recentPlays, setRecentPlays] = useState<PlayEvent[]>([]);
+  const [gameEvents, setGameEvents] = useState<GameEvent[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,84 +101,126 @@ export const GameDashboard: React.FC = () => {
     if (!selectedGameId) return;
 
     let unsubscribe: (() => void) | null = null;
+    let cancelled = false;
 
     const init = async () => {
-        try {
+      try {
         stats.disconnect();
-
+        setIsConnected(false);
+        setGameState(null);
+        setGameEvents([]);
+        setError(null);
         stats.setGameId(selectedGameId);
 
         const snapshot = await stats.getSnapshot();
+        if (cancelled) return;
 
         setGameState(snapshot.gameState);
-        setRecentPlays(snapshot.playHistory);
+        setGameEvents(snapshot.gameEvents);
 
-        await stats.connect();
-        setIsConnected(true);
-
-        unsubscribe = stats.subscribe((event) => {
+        if (snapshot.gameState.isActive) {
+          unsubscribe = stats.subscribe((event) => {
             if (event.type === 'gamestate') {
-            setGameState(event.data);
+              setGameState(event.data);
             }
 
             if (event.type === 'playevent') {
-            setRecentPlays((prev) =>
-                [...prev, event.data].slice(-50)
-            );
+              const sourceEvent = event.data.sourceEvent;
+              if (!sourceEvent) {
+                setError('Live event did not include its source game event.');
+                return;
+              }
+
+              const incomingEvent = { ...sourceEvent, id: event.data.id };
+              setGameEvents((prev) => {
+                if (!isEndOfPeriodEvent(incomingEvent.type)) {
+                  return [...prev, incomingEvent];
+                }
+
+                const existingIndex = prev.findIndex(
+                  (play) => play.type === incomingEvent.type,
+                );
+                if (existingIndex === -1) {
+                  return [...prev, incomingEvent];
+                }
+
+                const existingTimestamp = prev[existingIndex].timestamp;
+                const incomingTimestamp = incomingEvent.timestamp;
+                if (
+                  incomingTimestamp === null ||
+                  (existingTimestamp !== null && incomingTimestamp <= existingTimestamp)
+                ) {
+                  return prev;
+                }
+
+                return prev.map((play, index) =>
+                  index === existingIndex ? incomingEvent : play,
+                );
+              });
             }
-        });
-        } catch (err: any) {
-        setError(err.message ?? 'Failed to load game data');
+
+          });
+
+          await stats.connect();
+          if (!cancelled) {
+            setIsConnected(true);
+          }
         }
+      } catch (err: unknown) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to load game data');
+        }
+      }
     };
 
     init();
 
     return () => {
-        unsubscribe?.();
-        stats.disconnect();
+      cancelled = true;
+      unsubscribe?.();
+      stats.disconnect();
     };
-    }, [selectedGameId]);
+  }, [selectedGameId]);
 
   // =========================================================
   // RENDER
   // =========================================================
 
-    if (!selectedGameId && selectedTeamName) {
-      return (
-        <div className="team-picker">
-          <AppBanner onBack={() => navigateToTeam(null)} />
-          <TeamGamesPage
-            teamName={toTitleCase(selectedTeamName)}
-            teamColor={getTeamColor(selectedTeamName)}
-            teamLogo={getTeamLogo(selectedTeamName)}
-            onOpenGame={navigateToGame}
-          />
-        </div>
-      );
-    }
-
-    if (!selectedGameId) {
+  if (!selectedGameId && selectedTeamName) {
     return (
-        <div className="team-picker">
-          <AppBanner />
-          <div className="team-grid-scroll">
-            <div className="team-grid">
-              <h1 className="team-picker-title">GameCast</h1>
-              {teamNames.map((teamName) => (
-                <TeamTile
-                  key={teamName}
-                  name={toTitleCase(teamName)}
-                  teamColor={getTeamColor(teamName)}
-                  teamLogo={getTeamLogo(teamName)}
-                  onClick={() => navigateToTeam(teamName)}
-                />
-              ))}
-            </div>
+      <div className="team-picker">
+        <AppBanner onBack={() => navigateToTeam(null)} />
+        <TeamGamesPage
+          teamName={toTitleCase(selectedTeamName)}
+          teamColor={getTeamColor(selectedTeamName)}
+          teamLogo={getTeamLogo(selectedTeamName)}
+          onOpenGame={navigateToGame}
+        />
+      </div>
+    );
+  }
+
+  if (!selectedGameId) {
+    return (
+      <div className="team-picker">
+        <AppBanner />
+        <div className="team-grid-scroll">
+          <div className="team-grid">
+            <h1 className="team-picker-title">GameCast</h1>
+            {teamNames.map((teamName) => (
+              <TeamTile
+                key={teamName}
+                name={toTitleCase(teamName)}
+                teamColor={getTeamColor(teamName)}
+                teamLogo={getTeamLogo(teamName)}
+                onClick={() => navigateToTeam(teamName)}
+              />
+            ))}
           </div>
         </div>
+      </div>
     );
-    }
+  }
 
   return (
     <div>
@@ -176,7 +229,7 @@ export const GameDashboard: React.FC = () => {
           stats.disconnect();
           setSelectedGameId(null);
           setGameState(null);
-          setRecentPlays([]);
+          setGameEvents([]);
           navigateToTeam(selectedTeamName);
         }}
       />
@@ -190,12 +243,25 @@ export const GameDashboard: React.FC = () => {
 
       {/* Main Layout */}
       <div className="dashboard-content">
-        <div className="field-section">
-          <FieldVisualization homeTeam={gameState?.homeTeamName ??  ''} discPosition={gameState?.discPosition} />
-        </div>
+        {gameState?.isActive && (
+          <div className="field-section">
+            <FieldVisualization homeTeam={gameState.homeTeamName} discPosition={gameState.discPosition} />
+          </div>
+        )}
 
         <div className="plays-section">
-          <PlayHistory plays={recentPlays} maxVisible={550} />
+          <PlayHistory
+            plays={gameEvents}
+            homeTeam={gameState?.homeTeamName ?? ''}
+            awayTeam={gameState?.awayTeamName ?? ''}
+            emptyMessage={
+              gameState?.gameStatus.toLowerCase() === 'upcoming'
+                ? 'No plays yet.'
+                : gameState?.gameStatus.toLowerCase() === 'final'
+                  ? 'No play history available.'
+                  : 'Waiting for plays...'
+            }
+          />
         </div>
       </div>
     </div>

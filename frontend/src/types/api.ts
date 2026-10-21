@@ -3,41 +3,48 @@
  * These ensure type safety and match the API contract
  */
 
-export enum EventType {
-  Pass = 'Pass',
-  Goal = 'Goal',
-  Turnover = 'Turnover',
-  Block = 'Block',
-  Catch = 'Catch',
-  Drop = 'Drop',
-  Other = 'Other',
-}
-
 export interface FieldPosition {
   x: number;
   y: number;
 }
 
-export interface PlayerSnapshot {
-  playerId: number;
-  playerName: string;
-  team: string;
-  position: FieldPosition;
-  jerseyNumber: number;
+export interface GameEvent {
+  id: number;
+  isHomeTeam: boolean;
+  timestamp: number | null;
+  type: string;
+  line: string[] | null;
+  time: number | null;
+  thrower: string | null;
+  throwerX: number | null;
+  throwerY: number | null;
+  receiver: string | null;
+  receiverX: number | null;
+  receiverY: number | null;
+  defender: string | null;
+  turnoverX: number | null;
+  turnoverY: number | null;
+  puller: string | null;
+  pullX: number | null;
+  pullY: number | null;
+  pullMs: number | null;
+  player: string | null;
 }
+
+export type SourceGameEvent = Omit<GameEvent, 'id'>;
 
 export interface PlayEvent {
   id: number;
   time: string;
-  timestamp: string;
-  eventType: EventType;
-  initiatorPlayerId: number;
+  timestamp: number | null;
+  eventType: string;
+  initiatorPlayerId: number | null;
   initiatorName: string;
-  receiverPlayerId?: number;
-  receiverName?: string;
-  distance?: number;
+  receiverPlayerId: number | null;
+  receiverName: string | null;
+  distance: number | null;
   description: string;
-  playersInvolved: PlayerSnapshot[];
+  sourceEvent: SourceGameEvent | null;
 }
 
 export interface GameState {
