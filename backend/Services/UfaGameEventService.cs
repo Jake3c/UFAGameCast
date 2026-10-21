@@ -147,7 +147,7 @@ public class UfaGameEventService : BackgroundService
             AwayTeamScore = gameData.AwayScore,
             GameStatus = gameData.Status,
             Week = gameData.Week,
-            StreamingUrl = gameData.StreamingURL,
+            StreamingUrl = gameData.StreamingURL ?? string.Empty,
 
             HomeTeamWins = homeTeam?.Wins ?? 0,
             AwayTeamWins = awayTeam?.Wins ?? 0,

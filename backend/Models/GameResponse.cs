@@ -16,9 +16,10 @@ public class GameData
     public string Status { get; set; } = string.Empty;
     public string StartTimestamp { get; set; } = string.Empty;
     public string StartTimezone { get; set; } = string.Empty;
-    public string StreamingURL { get; set; } = string.Empty;
+    public string? StreamingURL { get; set; }
     public string UpdateTimestamp { get; set; } = string.Empty;
     public string Week { get; set; } = string.Empty;
+    public string? Location { get; set; }
 }
 
 public enum GameStatus

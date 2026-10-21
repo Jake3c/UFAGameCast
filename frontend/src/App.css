@@ -27,17 +27,31 @@ body {
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
-  padding: 0 1rem 1rem;
+  padding: 0 1rem 0;
 }
 
-.team-picker-header {
+.app-banner {
   display: flex;
+  position: sticky;
+  top: 0;
+  z-index: 10;
   flex: none;
   height: 2.75rem;
   align-items: center;
   justify-content: center;
-  margin: 0 -1rem;
   background-color: #1e293b;
+}
+
+.team-picker .app-banner {
+  margin: 0 -1rem;
+}
+
+.app-banner-back {
+  position: absolute;
+  left: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: white;
 }
 
 .team-picker-title {
@@ -70,6 +84,225 @@ body {
   max-width: 900px;
   margin: 0 auto;
   padding: 0.25rem 1rem 1.5rem;
+}
+
+.team-games-scroll {
+  flex: 1;
+  min-height: 0;
+  width: calc(100% + 2rem);
+  margin: 0 -1rem;
+  overflow-y: auto;
+  padding: 1.25rem 1rem 1.5rem;
+}
+
+.team-games-content {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.team-games-heading {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid color-mix(in srgb, var(--team-color) 35%, white);
+  border-radius: 1rem;
+  background: radial-gradient(circle at top left, color-mix(in srgb, var(--team-color) 24%, white), white 80%);
+  box-shadow: 0 2px 8px rgb(15 23 42 / 8%);
+}
+
+.team-games-logo {
+  width: 5rem;
+  height: 5rem;
+  object-fit: contain;
+}
+
+.team-games-eyebrow {
+  margin: 0 0 0.2rem;
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.team-games-heading h1 {
+  margin: 0;
+  font-size: 1.75rem;
+}
+
+.team-games-note {
+  margin: 1.25rem 0 0.75rem;
+  color: #64748b;
+  font-size: 0.875rem;
+}
+
+.season-section {
+  margin-top: 1rem;
+}
+
+.season-section h2 {
+  margin: 0 0 0.5rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 2px solid #1e293b;
+  color: #1e293b;
+  font-size: 1.25rem;
+}
+
+.season-games {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.game-row {
+  display: grid;
+  grid-template-columns: 5rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 3.5rem;
+  padding: 0.65rem 0.9rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  background: white;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 6%);
+}
+
+.game-date,
+.game-opponent {
+  align-self: start;
+}
+
+.game-date {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  color: #64748b;
+  font-size: 1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.game-time-zone,
+.game-location-name {
+  color: #64748b;
+  font-weight: 400;
+}
+
+.game-time-zone {
+  font-size: 0.65rem;
+}
+
+.game-time-details {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+}
+
+.game-time {
+  color: #64748b;
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+
+.game-time-period {
+  margin-left: 0.2rem;
+  font-size: 0.65rem;
+}
+
+.game-location-name {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.7rem;
+}
+
+.game-opponent {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+
+.game-location {
+  width: 1.25rem;
+  color: #64748b;
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.game-result {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.game-status {
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.game-watch-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #dc2626;
+  transition: color 150ms ease, transform 150ms ease;
+}
+
+.game-watch-link:hover {
+  color: #991b1b;
+  transform: scale(1.08);
+}
+
+.game-watch-link:focus-visible {
+  border-radius: 0.25rem;
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.game-watch-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.game-watch-placeholder {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: none;
+}
+
+.game-outcome {
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 50%;
+  color: white;
+  font-size: 0.75rem;
+  line-height: 1.4rem;
+  text-align: center;
+}
+
+.game-outcome.is-win {
+  background: #15803d;
+}
+
+.game-outcome.is-loss {
+  background: #b91c1c;
+}
+
+.team-games-message {
+  padding: 1.5rem;
+  border-radius: 0.75rem;
+  background: white;
+  text-align: center;
+}
+
+.team-games-error {
+  color: #b91c1c;
 }
 
 .team-tile {
@@ -123,5 +356,29 @@ body {
   .team-tile-logo {
     width: 64px;
     height: 64px;
+  }
+
+  .team-games-scroll {
+    padding-right: 0.75rem;
+    padding-left: 0.75rem;
+  }
+
+  .game-row {
+    grid-template-columns: 3.5rem minmax(0, 1fr) auto;
+    gap: 0.4rem;
+    padding: 0.6rem;
+  }
+
+  .game-date {
+    font-size: 0.875rem;
+  }
+
+  .game-opponent {
+    gap: 0.25rem;
+    font-size: 0.875rem;
+  }
+
+  .game-status {
+    font-size: 0.65rem;
   }
 }

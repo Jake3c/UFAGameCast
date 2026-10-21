@@ -4,7 +4,7 @@ const teamColors: Record<string, string> = {
     "glory": "#E1B87F",
     "union": "#41B6E6",
     "apex": "#9FA8F0",
-    "breese": "#0A3751",
+    "breeze": "#0A3751",
     "havoc": "#FFF349",
     "alleycats": "#27A332",
     "bighorns": "#A25F3F",

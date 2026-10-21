@@ -31,7 +31,7 @@ const teamLogos: Record<string, string> = {
   "glory": TeamLogo_BOS,
   "union": TeamLogo_CHI,
   "apex": TeamLogo_COL,
-  "breese": TeamLogo_DC,
+  "breeze": TeamLogo_DC,
   "havoc": TeamLogo_HOU,
   "alleycats": TeamLogo_IND,
   "bighorns": TeamLogo_LV,

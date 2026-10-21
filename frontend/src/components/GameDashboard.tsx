@@ -3,6 +3,7 @@ import { FieldVisualization } from './FieldVisualization';
 import { PlayHistory } from './PlayHistory';
 import { GameInfo } from './GameInfo';
 import { TeamTile } from './TeamTile';
+import { TeamGamesPage } from './TeamGamesPage';
 import UfaLogo from '../resources/UFAIcon.png';
 import { getStatsService } from '../services/StatsService';
 import { GameState, PlayEvent } from '../types/api';
@@ -11,9 +12,31 @@ import { getTeamLogo } from '../utils/teamLogos';
 
 const teamNames = getTeamNames();
 
+function getTeamFromPath(): string | null {
+  const match = window.location.pathname.match(/^\/team=([^/]+)$/);
+  const teamName = match?.[1].toLowerCase();
+
+  return teamName && teamNames.includes(teamName) ? teamName : null;
+}
+
 function toTitleCase(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
+
+interface AppBannerProps {
+  onBack?: () => void;
+}
+
+const AppBanner: React.FC<AppBannerProps> = ({ onBack }) => (
+  <header className="app-banner">
+    {onBack && (
+      <button className="app-banner-back" onClick={onBack}>
+        Back
+      </button>
+    )}
+    <img src={UfaLogo} alt="UFA" className="team-picker-logo" />
+  </header>
+);
 
 /**
  * Main dashboard component
@@ -21,11 +44,24 @@ function toTitleCase(value: string) {
 export const GameDashboard: React.FC = () => {
   const stats = getStatsService();
 
+  const [selectedTeamName, setSelectedTeamName] = useState<string | null>(getTeamFromPath);
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [recentPlays, setRecentPlays] = useState<PlayEvent[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const syncTeamFromPath = () => setSelectedTeamName(getTeamFromPath());
+    window.addEventListener('popstate', syncTeamFromPath);
+    return () => window.removeEventListener('popstate', syncTeamFromPath);
+  }, []);
+
+  const navigateToTeam = (teamName: string | null) => {
+    const path = teamName ? `/team=${encodeURIComponent(teamName)}` : '/';
+    window.history.pushState(null, '', path);
+    setSelectedTeamName(teamName);
+  };
 
   // =========================================================
   // BOOTSTRAP SNAPSHOT + CONNECT SSE
@@ -77,12 +113,23 @@ export const GameDashboard: React.FC = () => {
   // RENDER
   // =========================================================
 
+    if (!selectedGameId && selectedTeamName) {
+      return (
+        <div className="team-picker">
+          <AppBanner onBack={() => navigateToTeam(null)} />
+          <TeamGamesPage
+            teamName={toTitleCase(selectedTeamName)}
+            teamColor={getTeamColor(selectedTeamName)}
+            teamLogo={getTeamLogo(selectedTeamName)}
+          />
+        </div>
+      );
+    }
+
     if (!selectedGameId) {
     return (
         <div className="team-picker">
-          <header className="team-picker-header">
-            <img src={UfaLogo} alt="UFA" className="team-picker-logo" />
-          </header>
+          <AppBanner />
           <div className="team-grid-scroll">
             <div className="team-grid">
               <h1 className="team-picker-title">GameCast</h1>
@@ -92,6 +139,7 @@ export const GameDashboard: React.FC = () => {
                   name={toTitleCase(teamName)}
                   teamColor={getTeamColor(teamName)}
                   teamLogo={getTeamLogo(teamName)}
+                  onClick={() => navigateToTeam(teamName)}
                 />
               ))}
             </div>
@@ -102,26 +150,14 @@ export const GameDashboard: React.FC = () => {
 
   return (
     <div>
-      {/* Header */}
-      <div className="text-center font-semibold py-1 bg-slate-800 relative">
-        <button
-            className="text-white left-2 top-1/2 -translate-y-1/2 absolute"
-            onClick={() => {
-                stats.disconnect();
-                setSelectedGameId(null);
-                setGameState(null);
-                setRecentPlays([]);
-            }}
-            >
-            Back
-        </button>
-        <img
-          src={UfaLogo}
-          alt="UFA Gamecast Logo"
-          className="block mx-auto pt-1"
-          style={{ width: '60px', height: 'auto' }}
-        />
-      </div>
+      <AppBanner
+        onBack={() => {
+          stats.disconnect();
+          setSelectedGameId(null);
+          setGameState(null);
+          setRecentPlays([]);
+        }}
+      />
 
       {/* Game Info */}
       <GameInfo
