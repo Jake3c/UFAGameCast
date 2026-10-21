@@ -41,6 +41,7 @@ export interface PlayEvent {
 }
 
 export interface GameState {
+  gameId: string;
   homeTeamName: string;
   awayTeamName: string;
   homeTeamScore: number;

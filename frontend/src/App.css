@@ -157,6 +157,7 @@ body {
 }
 
 .game-row {
+  position: relative;
   display: grid;
   grid-template-columns: 5rem minmax(0, 1fr) auto;
   align-items: center;
@@ -167,6 +168,28 @@ body {
   border-radius: 0.75rem;
   background: white;
   box-shadow: 0 1px 3px rgb(15 23 42 / 6%);
+}
+
+.game-row-navigation {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.game-row-navigation:focus-visible {
+  outline: 3px solid #1e293b;
+  outline-offset: 2px;
+}
+
+.game-row > :not(.game-row-navigation) {
+  pointer-events: none;
+}
+
+.game-row .game-watch-link {
+  position: relative;
+  z-index: 2;
+  pointer-events: auto;
 }
 
 .game-date,

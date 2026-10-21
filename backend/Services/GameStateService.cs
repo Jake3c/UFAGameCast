@@ -35,7 +35,19 @@ public class GameStateService
     {
         lock (_lockObject)
         {
+            if (string.Equals(_currentGameId, gameId, StringComparison.Ordinal))
+            {
+                return;
+            }
+
             _currentGameId = gameId;
+            _currentGameState = InitializeGameState();
+            _allGameEvents.Clear();
+            _recentGameEventQueue.Clear();
+
+            while (_eventChannel.Reader.TryRead(out _))
+            {
+            }
         }
     }
 
@@ -55,11 +67,17 @@ public class GameStateService
         }
     }
 
-    public void UpdateGameState(GameState state)
+    public bool UpdateGameState(string gameId, GameState state)
     {
         lock (_lockObject)
         {
+            if (!string.Equals(_currentGameId, gameId, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
             _currentGameState = state;
+            return true;
         }
     }
 

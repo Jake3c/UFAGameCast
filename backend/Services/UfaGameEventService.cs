@@ -111,7 +111,10 @@ public class UfaGameEventService : BackgroundService
 
         var updatedGameState = BuildGameState(gameData);
 
-        _gameStateService.UpdateGameState(updatedGameState);
+        if (!_gameStateService.UpdateGameState(gameId, updatedGameState))
+        {
+            return;
+        }
 
         await ProcessEvents(eventsResponse, updatedGameState, token);
     }
@@ -124,6 +127,35 @@ public class UfaGameEventService : BackgroundService
     {
         await EnsureTeamCache(CancellationToken.None);
         await PollGameCycle(gameId, CancellationToken.None);
+    }
+
+    public async Task<GameState> GetGameStateAsync(string gameId, CancellationToken cancellationToken)
+    {
+        await EnsureTeamCache(cancellationToken);
+
+        var url = $"{_baseUrl}/games?gameIDs={Uri.EscapeDataString(gameId)}";
+        using var response = await _httpClient.GetAsync(url, cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException(
+                "The UFA games API returned an unsuccessful response.",
+                null,
+                response.StatusCode);
+        }
+
+        var gameResponse = await response.Content.ReadFromJsonAsync<GameResponse>(
+            _jsonOptions,
+            cancellationToken);
+        var gameData = gameResponse?.Data.FirstOrDefault(game =>
+            string.Equals(game.GameID, gameId, StringComparison.OrdinalIgnoreCase));
+
+        if (gameData is null)
+        {
+            throw new KeyNotFoundException($"No game was found with ID '{gameId}'.");
+        }
+
+        return BuildGameState(gameData);
     }
 
     private async Task<GameData> ExtractGameData(HttpResponseMessage response, CancellationToken token)
@@ -141,6 +173,7 @@ public class UfaGameEventService : BackgroundService
 
         return new GameState
         {
+            GameId = gameData.GameID,
             HomeTeamName = gameData.HomeTeamID,
             AwayTeamName = gameData.AwayTeamID,
             HomeTeamScore = gameData.HomeScore,

@@ -2,6 +2,7 @@ namespace UFAGameCast.Backend.Models;
 
 public class GameState
 {
+    public string GameId { get; set; } = string.Empty;
     public string HomeTeamName { get; set; } = string.Empty;
     public string AwayTeamName { get; set; } = string.Empty;
     public int HomeTeamWins { get; set; } = 0;

@@ -4,6 +4,7 @@ import { TeamGame } from '../services/TeamGamesService';
 interface GameRowTileProps {
   game: TeamGame;
   teamName: string;
+  onOpenGame: (gameId: string) => void;
 }
 
 function formatGameDate(startTime: string): string {
@@ -30,7 +31,7 @@ function toTitleCase(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-export const GameRowTile: React.FC<GameRowTileProps> = ({ game, teamName }) => {
+export const GameRowTile: React.FC<GameRowTileProps> = ({ game, teamName, onOpenGame }) => {
   const isHome = game.homeTeam.toLowerCase() === teamName.toLowerCase();
   const opponent = isHome ? game.awayTeam : game.homeTeam;
   const teamScore = isHome ? game.homeScore : game.awayScore;
@@ -40,6 +41,15 @@ export const GameRowTile: React.FC<GameRowTileProps> = ({ game, teamName }) => {
 
   return (
     <article className="game-row" title={game.gameId}>
+      <a
+        className="game-row-navigation"
+        href={`/game=${encodeURIComponent(game.gameId)}`}
+        aria-label={`Open ${toTitleCase(teamName)} vs ${toTitleCase(opponent)} gamecast`}
+        onClick={(event) => {
+          event.preventDefault();
+          onOpenGame(game.gameId);
+        }}
+      />
       <time className="game-date" dateTime={game.startTime}>
         {formatGameDate(game.startTime)}
         <span className="game-time-details">
@@ -71,6 +81,7 @@ export const GameRowTile: React.FC<GameRowTileProps> = ({ game, teamName }) => {
             className="game-watch-link"
             aria-label={`Watch ${toTitleCase(teamName)} vs ${toTitleCase(opponent)}`}
             title="Watch game"
+            onClick={(event) => event.stopPropagation()}
           >
             <svg
               aria-hidden="true"

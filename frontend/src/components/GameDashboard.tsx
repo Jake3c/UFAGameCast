@@ -19,6 +19,17 @@ function getTeamFromPath(): string | null {
   return teamName && teamNames.includes(teamName) ? teamName : null;
 }
 
+function getGameFromPath(): string | null {
+  const match = window.location.pathname.match(/^\/game=([^/]+)$/);
+  if (!match?.[1]) return null;
+
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+}
+
 function toTitleCase(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
@@ -45,22 +56,31 @@ export const GameDashboard: React.FC = () => {
   const stats = getStatsService();
 
   const [selectedTeamName, setSelectedTeamName] = useState<string | null>(getTeamFromPath);
-  const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
+  const [selectedGameId, setSelectedGameId] = useState<string | null>(getGameFromPath);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [recentPlays, setRecentPlays] = useState<PlayEvent[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const syncTeamFromPath = () => setSelectedTeamName(getTeamFromPath());
-    window.addEventListener('popstate', syncTeamFromPath);
-    return () => window.removeEventListener('popstate', syncTeamFromPath);
+    const syncRouteFromPath = () => {
+      setSelectedTeamName(getTeamFromPath());
+      setSelectedGameId(getGameFromPath());
+    };
+    window.addEventListener('popstate', syncRouteFromPath);
+    return () => window.removeEventListener('popstate', syncRouteFromPath);
   }, []);
 
   const navigateToTeam = (teamName: string | null) => {
     const path = teamName ? `/team=${encodeURIComponent(teamName)}` : '/';
     window.history.pushState(null, '', path);
     setSelectedTeamName(teamName);
+    setSelectedGameId(null);
+  };
+
+  const navigateToGame = (gameId: string) => {
+    window.history.pushState(null, '', `/game=${encodeURIComponent(gameId)}`);
+    setSelectedGameId(gameId);
   };
 
   // =========================================================
@@ -121,6 +141,7 @@ export const GameDashboard: React.FC = () => {
             teamName={toTitleCase(selectedTeamName)}
             teamColor={getTeamColor(selectedTeamName)}
             teamLogo={getTeamLogo(selectedTeamName)}
+            onOpenGame={navigateToGame}
           />
         </div>
       );
@@ -156,6 +177,7 @@ export const GameDashboard: React.FC = () => {
           setSelectedGameId(null);
           setGameState(null);
           setRecentPlays([]);
+          navigateToTeam(selectedTeamName);
         }}
       />
 

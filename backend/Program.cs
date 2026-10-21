@@ -27,9 +27,10 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSingleton<GameStateService>();
 builder.Services.AddHttpClient();
 builder.Services.AddHttpClient<ITeamGamesService, TeamGamesService>();
+builder.Services.AddSingleton<UfaGameEventService>();
 
 //Switch for testing
-builder.Services.AddHostedService<UfaGameEventService>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<UfaGameEventService>());
 //builder.Services.AddHostedService<GameSimulationService>();
 
 var app = builder.Build();

@@ -6,12 +6,14 @@ interface TeamGamesPageProps {
   teamName: string;
   teamColor: string;
   teamLogo: string;
+  onOpenGame: (gameId: string) => void;
 }
 
 export const TeamGamesPage: React.FC<TeamGamesPageProps> = ({
   teamName,
   teamColor,
   teamLogo,
+  onOpenGame,
 }) => {
   const [games, setGames] = useState<TeamGame[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -74,7 +76,12 @@ export const TeamGamesPage: React.FC<TeamGamesPageProps> = ({
               {[...yearGames]
                 .sort((first, second) => second.startTime.localeCompare(first.startTime))
                 .map((game) => (
-                  <GameRowTile key={game.gameId} game={game} teamName={teamName} />
+                  <GameRowTile
+                    key={game.gameId}
+                    game={game}
+                    teamName={teamName}
+                    onOpenGame={onOpenGame}
+                  />
                 ))}
             </div>
           </section>

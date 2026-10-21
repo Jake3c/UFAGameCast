@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using UFAGameCast.Backend.Models;
 using UFAGameCast.Backend.Services;
@@ -11,6 +12,7 @@ namespace UFAGameCast.Backend.Controllers;
 public class StatsController : ControllerBase
 {
     private readonly GameStateService _gameStateService;
+    private readonly UfaGameEventService _ufaGameEventService;
     private readonly ILogger<StatsController> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -24,9 +26,11 @@ public class StatsController : ControllerBase
 
     public StatsController(
         GameStateService gameStateService,
+        UfaGameEventService ufaGameEventService,
         ILogger<StatsController> logger)
     {
         _gameStateService = gameStateService;
+        _ufaGameEventService = ufaGameEventService;
         _logger = logger;
     }
 
@@ -35,21 +39,48 @@ public class StatsController : ControllerBase
     /// Returns the current game state and complete play history.
     /// </summary>
     [HttpGet("snapshot")]
-    public async Task<IActionResult> GetSnapshot([FromQuery] string gameId)
+    public async Task<IActionResult> GetSnapshot(
+        [FromQuery, Required] string gameId,
+        CancellationToken cancellationToken)
     {
         _gameStateService.SetCurrentGameId(gameId);
-        var history = _gameStateService.GetAllPlayEvents();
 
-        _ = Task.Run(async () =>
+        try
         {
-            await _gameStateService.ReplayEventsSlowly(history, 5000);
-        });
+            var gameState = await _ufaGameEventService.GetGameStateAsync(gameId, cancellationToken);
+            if (!_gameStateService.UpdateGameState(gameId, gameState))
+            {
+                return Conflict(new ProblemDetails
+                {
+                    Status = StatusCodes.Status409Conflict,
+                    Title = "Game selection changed",
+                    Detail = "The requested game was superseded by another game request."
+                });
+            }
 
-        return Ok(new
+            return Ok(new
+            {
+                gameState,
+                playHistory = _gameStateService.GetAllPlayEvents()
+            });
+        }
+        catch (KeyNotFoundException)
         {
-            gameState = _gameStateService.GetCurrentGameState(),
-            playHistory = _gameStateService.GetAllPlayEvents()
-        });
+            return NotFound(new ProblemDetails
+            {
+                Status = StatusCodes.Status404NotFound,
+                Title = "Game not found",
+                Detail = $"No game was found with ID '{gameId}'."
+            });
+        }
+        catch (HttpRequestException exception)
+        {
+            _logger.LogWarning(exception, "Unable to retrieve game {GameId}", gameId);
+            return Problem(
+                title: "Unable to retrieve game",
+                detail: "The upstream games service could not complete the request.",
+                statusCode: StatusCodes.Status502BadGateway);
+        }
     }
 
     [HttpGet("live")]
