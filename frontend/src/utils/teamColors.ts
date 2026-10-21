@@ -10,7 +10,7 @@ const teamColors: Record<string, string> = {
     "bighorns": "#A25F3F",
     "radicals": "#cbb82e",
     "windchill": "#6F7F98",
-    "royale": "#f96b07",
+    "royal": "#f96b07",
     "empire": "#69bd45",
     "spiders": "#FEBD25",
     "steel": "#00BBF2",

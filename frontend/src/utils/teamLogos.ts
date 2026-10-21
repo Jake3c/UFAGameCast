@@ -37,7 +37,7 @@ const teamLogos: Record<string, string> = {
   "bighorns": TeamLogo_LV,
   "radicals": TeamLogo_MAD,
   "windchill": TeamLogo_MIN,
-  "royale": TeamLogo_MTL,
+  "royal": TeamLogo_MTL,
   "empire": TeamLogo_NY,
   "spiders": TeamLogo_OAK,
   "steel": TeamLogo_ORE,

@@ -13,7 +13,7 @@ public sealed class TeamGamesController : ControllerBase
     {
         "alleycats", "apex", "bighorns", "breeze", "cascades", "empire",
         "flyers", "glory", "growlers", "havoc", "hustle", "phoenix",
-        "radicals", "royale", "rush", "shred", "sol", "spiders", "steel",
+        "radicals", "royal", "rush", "shred", "sol", "spiders", "steel",
         "thunderbirds", "union", "windchill"
     };
 
