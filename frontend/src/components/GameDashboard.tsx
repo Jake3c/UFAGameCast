@@ -2,9 +2,18 @@ import React, { useEffect, useState } from 'react';
 import { FieldVisualization } from './FieldVisualization';
 import { PlayHistory } from './PlayHistory';
 import { GameInfo } from './GameInfo';
+import { TeamTile } from './TeamTile';
 import UfaLogo from '../resources/UFAIcon.png';
 import { getStatsService } from '../services/StatsService';
 import { GameState, PlayEvent } from '../types/api';
+import { getTeamColor, getTeamNames } from '../utils/teamColors';
+import { getTeamLogo } from '../utils/teamLogos';
+
+const teamNames = getTeamNames();
+
+function toTitleCase(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
 
 /**
  * Main dashboard component
@@ -12,7 +21,6 @@ import { GameState, PlayEvent } from '../types/api';
 export const GameDashboard: React.FC = () => {
   const stats = getStatsService();
 
-  const [gameId, setGameId] = useState<string>('2026-06-27-MAD-IND');
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [recentPlays, setRecentPlays] = useState<PlayEvent[]>([]);
@@ -71,30 +79,23 @@ export const GameDashboard: React.FC = () => {
 
     if (!selectedGameId) {
     return (
-        <div className="min-h-screen flex items-center justify-center">
-        <div className="w-full max-w-md p-6">
-            <h1 className="text-2xl font-bold mb-4 text-center">
-            UFA GameCast
-            </h1>
-
-            <input
-            type="text"
-            value={gameId}
-            onChange={(e) => setGameId(e.target.value)}
-            className="w-full border rounded px-3 py-2 mb-3"
-            />
-
-            <button
-            className="w-full bg-blue-600 text-white rounded px-3 py-2"
-            onClick={() => {
-                if (gameId.trim()) {
-                setSelectedGameId(gameId.trim());
-                }
-            }}
-            >
-            Load Game
-            </button>
-        </div>
+        <div className="team-picker">
+          <header className="team-picker-header">
+            <img src={UfaLogo} alt="UFA" className="team-picker-logo" />
+          </header>
+          <div className="team-grid-scroll">
+            <div className="team-grid">
+              <h1 className="team-picker-title">GameCast</h1>
+              {teamNames.map((teamName) => (
+                <TeamTile
+                  key={teamName}
+                  name={toTitleCase(teamName)}
+                  teamColor={getTeamColor(teamName)}
+                  teamLogo={getTeamLogo(teamName)}
+                />
+              ))}
+            </div>
+          </div>
         </div>
     );
     }
