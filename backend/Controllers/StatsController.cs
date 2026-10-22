@@ -82,6 +82,31 @@ public class StatsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Previews historical event ordering rules without changing the live event stream.
+    /// </summary>
+    [HttpGet("ordering-preview")]
+    public async Task<IActionResult> GetOrderingPreview(
+        [FromQuery, Required] string gameId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var preview = await _ufaGameEventService.GetHistoricalOrderingPreviewAsync(
+                gameId,
+                cancellationToken);
+            return Ok(preview);
+        }
+        catch (HttpRequestException exception)
+        {
+            _logger.LogWarning(exception, "Unable to preview event ordering for game {GameId}", gameId);
+            return Problem(
+                title: "Unable to retrieve game events",
+                detail: "The upstream game events service could not complete the request.",
+                statusCode: StatusCodes.Status502BadGateway);
+        }
+    }
+
     [HttpGet("live")]
     public async Task GetLiveStats(CancellationToken cancellationToken)
     {

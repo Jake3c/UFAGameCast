@@ -213,7 +213,11 @@ public class UfaGameEventService : BackgroundService
         var eventsResult = await eventsResponse.Content.ReadFromJsonAsync<GameEventsResponse>(
             _jsonOptions,
             cancellationToken);
-        var gameEvents = MergeEventsByTimestamp(eventsResult?.Data);
+        var timestampOrderedEvents = MergeEventsByTimestamp(eventsResult?.Data);
+        var orderingPreview = HistoricalGameEventOrderer.CreatePreview(gameId, timestampOrderedEvents);
+        var gameEvents = orderingPreview.NormalizedEvents
+            .Select(entry => new TimedGameEvent(entry.Event, entry.Source, entry.SourceIndex, false))
+            .ToList();
         var mappedEvents = gameEvents
             .Select((item, index) =>
             {
@@ -231,6 +235,27 @@ public class UfaGameEventService : BackgroundService
         }
 
         return (gameState, gameEvents.Select(item => item.Event).ToList(), mappedEvents);
+    }
+
+    public async Task<GameEventOrderingPreviewResponse> GetHistoricalOrderingPreviewAsync(
+        string gameId,
+        CancellationToken cancellationToken)
+    {
+        var eventsUrl = $"{_baseUrl}/gameEvents?gameID={Uri.EscapeDataString(gameId)}";
+        using var response = await _httpClient.GetAsync(eventsUrl, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException(
+                "The UFA game events API returned an unsuccessful response.",
+                null,
+                response.StatusCode);
+        }
+
+        var eventsResult = await response.Content.ReadFromJsonAsync<GameEventsResponse>(
+            _jsonOptions,
+            cancellationToken);
+        var timestampOrderedEvents = MergeEventsByTimestamp(eventsResult?.Data);
+        return HistoricalGameEventOrderer.CreatePreview(gameId, timestampOrderedEvents);
     }
 
     private async Task<GameData> ExtractGameData(HttpResponseMessage response, CancellationToken token)
@@ -355,14 +380,16 @@ public class UfaGameEventService : BackgroundService
 
         // Put events without a timestamp last and use source/index to make ties deterministic.
         var events = data.HomeEvents
-            .Select((gameEvent, index) => new TimedGameEvent(NormalizeEvent(gameEvent, true), "home", index))
-            .Concat(data.AwayEvents.Select((gameEvent, index) => new TimedGameEvent(NormalizeEvent(gameEvent, false), "away", index)))
+            .Select((gameEvent, index) => CreateTimedGameEvent(gameEvent, "home", index, true))
+            .Concat(data.AwayEvents.Select((gameEvent, index) => CreateTimedGameEvent(gameEvent, "away", index, false)))
             .Where(item => item.Event.Type is not (
                 EventType.ScoreByOpponent or
                 EventType.ThrowawayByOpponent or
                 EventType.MidpointTimeoutOpponent or
                 EventType.BetweenPointTimeoutOpponent))
             .ToList();
+
+        events = RemoveDuplicatePenaltyReports(events);
 
         var latestEndOfPeriodEvents = events
             .Where(item => IsEndOfPeriodEvent(item.Event.Type))
@@ -392,6 +419,74 @@ public class UfaGameEventService : BackgroundService
             EventType.EndRegulation or
             EventType.EndOT1 or
             EventType.EndOT2;
+
+    private static TimedGameEvent CreateTimedGameEvent(
+        GameEvent gameEvent,
+        string source,
+        int sourceIndex,
+        bool isHomeTeam)
+    {
+        var wasPenaltyOpponent = gameEvent.Type == EventType.PenaltyOpponent;
+        NormalizeEvent(gameEvent, isHomeTeam);
+        return new TimedGameEvent(gameEvent, source, sourceIndex, wasPenaltyOpponent);
+    }
+
+    private static List<TimedGameEvent> RemoveDuplicatePenaltyReports(
+        IReadOnlyList<TimedGameEvent> events)
+    {
+        var matches = new List<(int ConvertedIndex, int RecordingIndex, decimal Skew)>();
+        for (var convertedIndex = 0; convertedIndex < events.Count; convertedIndex++)
+        {
+            var converted = events[convertedIndex];
+            if (!converted.WasPenaltyOpponent || converted.Event.Timestamp is not long convertedTimestamp)
+            {
+                continue;
+            }
+
+            for (var recordingIndex = 0; recordingIndex < events.Count; recordingIndex++)
+            {
+                var recording = events[recordingIndex];
+                if (recording.WasPenaltyOpponent ||
+                    recording.Event.Type != EventType.PenaltyRecording ||
+                    recording.Source == converted.Source ||
+                    recording.Event.IsHomeTeam != converted.Event.IsHomeTeam ||
+                    recording.Event.Timestamp is not long recordingTimestamp)
+                {
+                    continue;
+                }
+
+                var skew = Math.Abs((decimal)convertedTimestamp - recordingTimestamp);
+                if (skew <= HistoricalGameEventOrderer.MaxTimestampSkewSeconds)
+                {
+                    matches.Add((convertedIndex, recordingIndex, skew));
+                }
+            }
+        }
+
+        var matchedConverted = new HashSet<int>();
+        var matchedRecording = new HashSet<int>();
+        var duplicateIndices = new HashSet<int>();
+        foreach (var match in matches
+            .OrderBy(match => match.Skew)
+            .ThenBy(match => events[match.ConvertedIndex].Event.Timestamp)
+            .ThenBy(match => events[match.ConvertedIndex].Source, StringComparer.Ordinal)
+            .ThenBy(match => events[match.ConvertedIndex].SourceIndex))
+        {
+            if (matchedConverted.Contains(match.ConvertedIndex) ||
+                matchedRecording.Contains(match.RecordingIndex))
+            {
+                continue;
+            }
+
+            matchedConverted.Add(match.ConvertedIndex);
+            matchedRecording.Add(match.RecordingIndex);
+            duplicateIndices.Add(match.ConvertedIndex);
+        }
+
+        return events
+            .Where((_, index) => !duplicateIndices.Contains(index))
+            .ToList();
+    }
 
     private static GameEvent NormalizeEvent(GameEvent gameEvent, bool isHomeTeam)
     {
@@ -424,11 +519,6 @@ public class UfaGameEventService : BackgroundService
             SourceEvent = evt
         };
     }
-
-    private sealed record TimedGameEvent(
-        GameEvent Event,
-        string Source,
-        int SourceIndex);
 
     private static string BuildDescription(GameEvent evt, int? distance) => evt.Type switch
     {

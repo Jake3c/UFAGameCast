@@ -8,3 +8,9 @@ GET {{baseUrl}}/api/stats/GetTeamGames
 
 ### Invalid team name format returns 400
 GET {{baseUrl}}/api/stats/GetTeamGames?TeamName=Radicals!
+
+### Preview historical event ordering without changing the live event stream
+GET {{baseUrl}}/api/stats/ordering-preview?gameId=2026-07-10-PIT-MAD
+
+### Missing game ID returns 400
+GET {{baseUrl}}/api/stats/ordering-preview
