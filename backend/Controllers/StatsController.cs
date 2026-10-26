@@ -60,7 +60,8 @@ public class StatsController : ControllerBase
             return Ok(new
             {
                 gameState = snapshot.GameState,
-                gameEvents = snapshot.GameEvents
+                gameEvents = snapshot.GameEvents,
+                playerNames = snapshot.PlayerNames
             });
         }
         catch (KeyNotFoundException)
@@ -77,7 +78,7 @@ public class StatsController : ControllerBase
             _logger.LogWarning(exception, "Unable to retrieve game {GameId}", gameId);
             return Problem(
                 title: "Unable to retrieve game",
-                detail: "The upstream games service could not complete the request.",
+                detail: "The upstream game or player data service could not complete the request.",
                 statusCode: StatusCodes.Status502BadGateway);
         }
     }

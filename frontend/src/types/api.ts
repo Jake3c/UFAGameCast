@@ -31,6 +31,8 @@ export interface GameEvent {
   player: string | null;
 }
 
+export type PlayerNames = Record<string, string>;
+
 export type SourceGameEvent = Omit<GameEvent, 'id'>;
 
 export interface PlayEvent {

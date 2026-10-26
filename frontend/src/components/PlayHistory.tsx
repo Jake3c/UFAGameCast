@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { GameEvent } from '../types/api';
+import { GameEvent, PlayerNames } from '../types/api';
 import { getTeamLogo } from '../utils/teamLogos';
 import UfaLogo from '../resources/UFAIcon.png';
 
@@ -8,6 +8,7 @@ interface PlayHistoryProps {
   plays: GameEvent[];
   homeTeam: string;
   awayTeam: string;
+  playerNames: PlayerNames;
   emptyMessage?: string;
 }
 
@@ -18,6 +19,7 @@ export const PlayHistory: React.FC<PlayHistoryProps> = ({
   plays,
   homeTeam,
   awayTeam,
+  playerNames,
   emptyMessage = 'Waiting for plays...',
 }) => {
   return (
@@ -34,7 +36,12 @@ export const PlayHistory: React.FC<PlayHistoryProps> = ({
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
               className="w-full"
             >
-              <PlayHistoryItem play={play} homeTeam={homeTeam} awayTeam={awayTeam} />
+              <PlayHistoryItem
+                play={play}
+                homeTeam={homeTeam}
+                awayTeam={awayTeam}
+                playerNames={playerNames}
+              />
             </motion.div>
           ))}
         </AnimatePresence>
@@ -57,10 +64,12 @@ function PlayHistoryItem({
   play,
   homeTeam,
   awayTeam,
+  playerNames,
 }: {
   play: GameEvent;
   homeTeam: string;
   awayTeam: string;
+  playerNames: PlayerNames;
 }) {
   const isGoal = play.type === 'goal';
   const isStartingLine = play.type === 'startDPoint' || play.type === 'startOPoint';
@@ -78,30 +87,35 @@ function PlayHistoryItem({
       <span className="play-event-details">
         {isGoal ? (
           <>
-            <strong>{play.thrower ?? ''}</strong>
+            <strong>{formatPlayerName(play.thrower, playerNames)}</strong>
             {' to '}
-            <strong>{play.receiver ?? ''}</strong>
+            <strong>{formatPlayerName(play.receiver, playerNames)}</strong>
           </>
         ) : play.type === 'pass' ? (
-          `${play.thrower ?? ''} to ${play.receiver ?? ''}`
+          `${formatPlayerName(play.thrower, playerNames)} to ${formatPlayerName(play.receiver, playerNames)}`
         ) : play.type === 'throwawayByRecording' ? (
-          play.thrower ?? ''
+          formatPlayerName(play.thrower, playerNames)
         ) : play.type === 'callahanThrownByOpponent' ? (
-          play.defender ?? ''
+          formatPlayerName(play.defender, playerNames)
         ) : play.type === 'callahanThrownByRecording' ? (
-          play.thrower ?? ''
+          formatPlayerName(play.thrower, playerNames)
         ) : play.type === 'block' ? (
-          play.defender ?? ''
+          formatPlayerName(play.defender, playerNames)
         ) : play.type === 'drop' ? (
-          play.receiver ?? ''
+          formatPlayerName(play.receiver, playerNames)
         ) : play.type === 'pullInbounds' ? (
-          play.puller ?? ''
+          formatPlayerName(play.puller, playerNames)
         ) : isStartingLine ? (
-          (play.line ?? []).join(', ')
+          (play.line ?? []).map((playerId) => formatPlayerName(playerId, playerNames)).join(', ')
         ) : null}
       </span>
     </article>
   );
+}
+
+function formatPlayerName(playerId: string | null, playerNames: PlayerNames) {
+  if (!playerId) return '';
+  return playerNames[playerId.toLowerCase()] ?? playerId;
 }
 
 function isEndOfPeriodEvent(eventType: string) {

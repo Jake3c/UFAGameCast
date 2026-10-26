@@ -6,7 +6,7 @@ import { TeamTile } from './TeamTile';
 import { TeamGamesPage } from './TeamGamesPage';
 import UfaLogo from '../resources/UFAIcon.png';
 import { getStatsService } from '../services/StatsService';
-import { GameEvent, GameState } from '../types/api';
+import { GameEvent, GameState, PlayerNames } from '../types/api';
 import { getTeamColor, getTeamNames } from '../utils/teamColors';
 import { getTeamLogo } from '../utils/teamLogos';
 
@@ -70,6 +70,7 @@ export const GameDashboard: React.FC = () => {
   const [selectedGameId, setSelectedGameId] = useState<string | null>(getGameFromPath);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [gameEvents, setGameEvents] = useState<GameEvent[]>([]);
+  const [playerNames, setPlayerNames] = useState<PlayerNames>({});
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -109,6 +110,7 @@ export const GameDashboard: React.FC = () => {
         setIsConnected(false);
         setGameState(null);
         setGameEvents([]);
+        setPlayerNames({});
         setError(null);
         stats.setGameId(selectedGameId);
 
@@ -117,6 +119,7 @@ export const GameDashboard: React.FC = () => {
 
         setGameState(snapshot.gameState);
         setGameEvents(snapshot.gameEvents);
+        setPlayerNames(snapshot.playerNames);
 
         if (snapshot.gameState.isActive) {
           unsubscribe = stats.subscribe((event) => {
@@ -230,6 +233,7 @@ export const GameDashboard: React.FC = () => {
           setSelectedGameId(null);
           setGameState(null);
           setGameEvents([]);
+          setPlayerNames({});
           navigateToTeam(selectedTeamName);
         }}
       />
@@ -254,6 +258,7 @@ export const GameDashboard: React.FC = () => {
             plays={gameEvents}
             homeTeam={gameState?.homeTeamName ?? ''}
             awayTeam={gameState?.awayTeamName ?? ''}
+            playerNames={playerNames}
             emptyMessage={
               gameState?.gameStatus.toLowerCase() === 'upcoming'
                 ? 'No plays yet.'

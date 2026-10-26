@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Globalization;
 using UFAGameCast.Backend.Models;
 
 namespace UFAGameCast.Backend.Services;
@@ -167,7 +168,8 @@ public class UfaGameEventService : BackgroundService
     public async Task<(
         GameState GameState,
         IReadOnlyList<GameEvent> GameEvents,
-        IReadOnlyList<GameEventViewModel> PlayHistory)> GetGameSnapshotAsync(
+        IReadOnlyList<GameEventViewModel> PlayHistory,
+        IReadOnlyDictionary<string, string> PlayerNames)> GetGameSnapshotAsync(
         string gameId,
         CancellationToken cancellationToken)
     {
@@ -195,9 +197,14 @@ public class UfaGameEventService : BackgroundService
         }
 
         var gameState = BuildGameState(gameData);
+        var playerNames = await GetPlayerNamesAsync(gameData, cancellationToken);
         if (IsUpcomingOrUnplayed(gameState.GameStatus))
         {
-            return (gameState, Array.Empty<GameEvent>(), Array.Empty<GameEventViewModel>());
+            return (
+                gameState,
+                Array.Empty<GameEvent>(),
+                Array.Empty<GameEventViewModel>(),
+                playerNames);
         }
 
         var eventsUrl = $"{_baseUrl}/gameEvents?gameID={Uri.EscapeDataString(gameId)}";
@@ -234,7 +241,66 @@ public class UfaGameEventService : BackgroundService
             }
         }
 
-        return (gameState, gameEvents.Select(item => item.Event).ToList(), mappedEvents);
+        return (
+            gameState,
+            gameEvents.Select(item => item.Event).ToList(),
+            mappedEvents,
+            playerNames);
+    }
+
+    private async Task<IReadOnlyDictionary<string, string>> GetPlayerNamesAsync(
+        GameData gameData,
+        CancellationToken cancellationToken)
+    {
+        if (!DateTimeOffset.TryParse(
+                gameData.StartTimestamp,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.RoundtripKind,
+                out var startTimestamp))
+        {
+            throw new InvalidDataException(
+                $"The start timestamp for game '{gameData.GameID}' could not be parsed.");
+        }
+
+        var year = startTimestamp.Year;
+        var homePlayersTask = GetTeamPlayersAsync(gameData.HomeTeamID, year, cancellationToken);
+        var awayPlayersTask = GetTeamPlayersAsync(gameData.AwayTeamID, year, cancellationToken);
+        await Task.WhenAll(homePlayersTask, awayPlayersTask);
+
+        return homePlayersTask.Result
+            .Concat(awayPlayersTask.Result)
+            .GroupBy(player => player.PlayerID, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => $"{group.First().FirstName} {group.First().LastName}".Trim(),
+                StringComparer.OrdinalIgnoreCase);
+    }
+
+    private async Task<IReadOnlyList<PlayerData>> GetTeamPlayersAsync(
+        string teamId,
+        int year,
+        CancellationToken cancellationToken)
+    {
+        var url = $"{_baseUrl}/players?teamIDs={Uri.EscapeDataString(teamId)}&years={year}";
+        using var response = await _httpClient.GetAsync(url, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException(
+                $"The UFA players API returned an unsuccessful response for team '{teamId}'.",
+                null,
+                response.StatusCode);
+        }
+
+        var playersResponse = await response.Content.ReadFromJsonAsync<PlayersResponse>(
+            _jsonOptions,
+            cancellationToken);
+        if (playersResponse is null)
+        {
+            throw new InvalidDataException(
+                $"The UFA players API returned an empty response for team '{teamId}'.");
+        }
+
+        return playersResponse.Data;
     }
 
     public async Task<GameEventOrderingPreviewResponse> GetHistoricalOrderingPreviewAsync(

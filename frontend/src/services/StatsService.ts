@@ -1,4 +1,4 @@
-import { GameEvent, GameState, StatsStreamEvent } from '../types/api';
+import { GameEvent, GameState, PlayerNames, StatsStreamEvent } from '../types/api';
 
 export class StatsService {
   private gameId = '';
@@ -28,6 +28,7 @@ export class StatsService {
   async getSnapshot(): Promise<{
     gameState: GameState;
     gameEvents: GameEvent[];
+    playerNames: PlayerNames;
   }> {
     const res = await fetch(
       `${this.apiUrl}/api/stats/snapshot?gameId=${encodeURIComponent(this.gameId)}`
