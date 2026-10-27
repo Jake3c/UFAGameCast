@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { FieldVisualization } from './FieldVisualization';
+import React, { useEffect, useRef, useState } from 'react';
+import { FieldVisualization, mapGamePositionToFieldForTeam, PassAnimation } from './FieldVisualization';
 import { PlayHistory } from './PlayHistory';
 import { GameInfo } from './GameInfo';
 import { TeamTile } from './TeamTile';
@@ -71,8 +71,10 @@ export const GameDashboard: React.FC = () => {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [gameEvents, setGameEvents] = useState<GameEvent[]>([]);
   const [playerNames, setPlayerNames] = useState<PlayerNames>({});
+  const [passAnimation, setPassAnimation] = useState<PassAnimation | undefined>();
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const passAnimationId = useRef(0);
 
   useEffect(() => {
     const syncRouteFromPath = () => {
@@ -111,6 +113,7 @@ export const GameDashboard: React.FC = () => {
         setGameState(null);
         setGameEvents([]);
         setPlayerNames({});
+        setPassAnimation(undefined);
         setError(null);
         stats.setGameId(selectedGameId);
 
@@ -185,6 +188,37 @@ export const GameDashboard: React.FC = () => {
     };
   }, [selectedGameId]);
 
+  const animatePass = (play: GameEvent) => {
+    if (
+      play.throwerX === null ||
+      play.throwerY === null ||
+      play.receiverX === null ||
+      play.receiverY === null ||
+      ![play.throwerX, play.throwerY, play.receiverX, play.receiverY].every(Number.isFinite)
+    ) {
+      return;
+    }
+
+    setPassAnimation({
+      id: ++passAnimationId.current,
+      from: mapGamePositionToFieldForTeam(
+        { x: play.throwerX, y: play.throwerY },
+        play.isHomeTeam,
+      ),
+      to: mapGamePositionToFieldForTeam(
+        { x: play.receiverX, y: play.receiverY },
+        play.isHomeTeam,
+      ),
+      isAnimating: true,
+    });
+  };
+
+  const clearPassAnimation = (animationId: number) => {
+    setPassAnimation((current) =>
+      current?.id === animationId ? { ...current, isAnimating: false } : current,
+    );
+  };
+
   // =========================================================
   // RENDER
   // =========================================================
@@ -247,9 +281,14 @@ export const GameDashboard: React.FC = () => {
 
       {/* Main Layout */}
       <div className="dashboard-content">
-        {gameState?.isActive && (
+        {gameState && (gameState.isActive || gameState.gameStatus.toLowerCase() === 'final') && (
           <div className="field-section">
-            <FieldVisualization homeTeam={gameState.homeTeamName} discPosition={gameState.discPosition} />
+            <FieldVisualization
+              homeTeam={gameState.homeTeamName}
+              discPosition={gameState.discPosition}
+              passAnimation={passAnimation}
+              onPassAnimationComplete={clearPassAnimation}
+            />
           </div>
         )}
 
@@ -259,6 +298,7 @@ export const GameDashboard: React.FC = () => {
             homeTeam={gameState?.homeTeamName ?? ''}
             awayTeam={gameState?.awayTeamName ?? ''}
             playerNames={playerNames}
+            onPassClick={animatePass}
             emptyMessage={
               gameState?.gameStatus.toLowerCase() === 'upcoming'
                 ? 'No plays yet.'

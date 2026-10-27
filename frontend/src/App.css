@@ -112,6 +112,19 @@ body {
   color: #64748b;
 }
 
+.play-event-row--expandable {
+  cursor: pointer;
+}
+
+.play-event-row--clickable {
+  cursor: pointer;
+}
+
+.play-event-row--clickable:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
 .play-event-status-rule {
   flex: 1;
   height: 1px;
@@ -139,6 +152,30 @@ body {
   gap: 0.5rem;
 }
 
+.play-event-pass-title {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.2rem;
+  white-space: nowrap;
+}
+
+.play-event-pass-arrow {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex: none;
+  overflow: visible;
+  color: #475569;
+}
+
+.play-event-pass-arrow path {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
 .play-event-team-logo {
   width: 1.5rem;
   height: 1.5rem;
@@ -154,16 +191,23 @@ body {
 .play-event-starting-point-toggle {
   grid-column: 1 / -1;
   display: flex;
+  flex-direction: column;
   width: 100%;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  justify-content: center;
+  gap: 0;
   padding: 0;
   border: 0;
   background: transparent;
   color: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+.play-event-starting-point-toggle .play-event-type-group {
+  width: 100%;
+  justify-content: center;
+  text-align: center;
 }
 
 .play-event-starting-point-toggle:focus-visible {
@@ -175,6 +219,7 @@ body {
   display: flex;
   flex: none;
   align-items: center;
+  justify-content: center;
   gap: 0.35rem;
   color: #64748b;
   font-size: 0.75rem;

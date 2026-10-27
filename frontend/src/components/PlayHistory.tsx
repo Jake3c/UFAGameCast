@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GameEvent, PlayerNames } from '../types/api';
 import { getTeamLogo } from '../utils/teamLogos';
+import { mapGamePositionToField } from './FieldVisualization';
 import UfaLogo from '../resources/UFAIcon.png';
 
 const eventDisplayNames: Record<string, string> = {
@@ -47,6 +48,7 @@ interface PlayHistoryProps {
   homeTeam: string;
   awayTeam: string;
   playerNames: PlayerNames;
+  onPassClick?: (play: GameEvent) => void;
   emptyMessage?: string;
 }
 
@@ -58,6 +60,7 @@ export const PlayHistory: React.FC<PlayHistoryProps> = ({
   homeTeam,
   awayTeam,
   playerNames,
+  onPassClick,
   emptyMessage = 'Waiting for plays...',
 }) => {
   const displayPlays = combineStartingPointEvents(plays);
@@ -83,6 +86,7 @@ export const PlayHistory: React.FC<PlayHistoryProps> = ({
                 homeTeam={homeTeam}
                 awayTeam={awayTeam}
                 playerNames={playerNames}
+                onPassClick={onPassClick}
               />
             </motion.div>
           ))}
@@ -146,6 +150,7 @@ function PlayHistoryItem({
   homeTeam,
   awayTeam,
   playerNames,
+  onPassClick,
 }: {
   play: GameEvent;
   pairedStart?: GameEvent;
@@ -153,23 +158,39 @@ function PlayHistoryItem({
   homeTeam: string;
   awayTeam: string;
   playerNames: PlayerNames;
+  onPassClick?: (play: GameEvent) => void;
 }) {
   const [isStartingPointExpanded, setIsStartingPointExpanded] = useState(false);
   const startDPoint = play.type === 'startDPoint' ? play : pairedStart?.type === 'startDPoint' ? pairedStart : undefined;
   const startOPoint = play.type === 'startOPoint' ? play : pairedStart?.type === 'startOPoint' ? pairedStart : undefined;
   const isStartingPointPair = startDPoint !== undefined && startOPoint !== undefined;
   const isGoal = play.type === 'goal';
+  const isPass = play.type === 'pass';
   const isStartingLine = play.type === 'startDPoint' || play.type === 'startOPoint';
   const isEndOfPeriod = isEndOfPeriodEvent(play.type);
   const isGameStatus = isGameStatusEvent(play.type);
+  const passVector = isPass ? getPassVector(play) : undefined;
   const teamName = play.isHomeTeam ? homeTeam : awayTeam;
   const teamLogo = isEndOfPeriod ? UfaLogo : getTeamLogo(teamName);
   const teamLogoAlt = isEndOfPeriod ? 'UFA logo' : `${teamName} logo`;
   const startDTeamName = startDPoint?.isHomeTeam ? homeTeam : awayTeam;
   const startOTeamName = startOPoint?.isHomeTeam ? homeTeam : awayTeam;
+  const toggleStartingPoint = () => setIsStartingPointExpanded((expanded) => !expanded);
 
   return (
-    <article className={`play-event-row play-event-row--${getEventTone(play.type)}${isGoal ? ' play-event-row--goal' : ''}${isGameStatus ? ' play-event-row--status' : ''}`}>
+    <article
+      className={`play-event-row play-event-row--${getEventTone(play.type)}${isGoal ? ' play-event-row--goal' : ''}${isGameStatus ? ' play-event-row--status' : ''}${isStartingPointPair ? ' play-event-row--expandable' : ''}${isPass ? ' play-event-row--clickable' : ''}`}
+      onClick={isStartingPointPair ? toggleStartingPoint : isPass ? () => onPassClick?.(play) : undefined}
+      onKeyDown={isPass ? (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onPassClick?.(play);
+        }
+      } : undefined}
+      role={isPass ? 'button' : undefined}
+      tabIndex={isPass ? 0 : undefined}
+      aria-label={isPass ? `Animate pass from ${formatPlayerName(play.thrower, playerNames)} to ${formatPlayerName(play.receiver, playerNames)}` : undefined}
+    >
       {isStartingPointPair ? (
         <>
           <button
@@ -177,7 +198,10 @@ function PlayHistoryItem({
             className="play-event-starting-point-toggle"
             aria-expanded={isStartingPointExpanded}
             aria-controls={`starting-lineups-${play.id}`}
-            onClick={() => setIsStartingPointExpanded((expanded) => !expanded)}
+            onClick={(event) => {
+              event.stopPropagation();
+              toggleStartingPoint();
+            }}
           >
             <span className="play-event-type-group">
               <img className="play-event-team-logo" src={getTeamLogo(startDTeamName)} alt="" />
@@ -222,7 +246,25 @@ function PlayHistoryItem({
             <>
               <span className="play-event-type-group">
                 {teamLogo && <img className="play-event-team-logo" src={teamLogo} alt={teamLogoAlt} />}
-                <span className={`play-event-type${play.type === 'callahanThrownByOpponent' ? ' play-event-type--callahan' : ''}`}>{eventDisplayNames[play.type] ?? play.type}</span>
+                {isPass ? (
+                  <span className="play-event-pass-title">
+                    {passVector && (
+                      <svg
+                        className="play-event-pass-arrow"
+                        viewBox="0 0 24 24"
+                        aria-label="Pass direction"
+                        role="img"
+                        style={{ transform: `rotate(${passVector.angle}deg)` }}
+                      >
+                        <path d="M3 12h16m-6-6 6 6-6 6" />
+                      </svg>
+                    )}
+                    {passVector ? `${passVector.distance} yd ` : ''}
+                    <span className="play-event-type">{eventDisplayNames[play.type] ?? play.type}</span>
+                  </span>
+                ) : (
+                  <span className={`play-event-type${play.type === 'callahanThrownByOpponent' ? ' play-event-type--callahan' : ''}`}>{eventDisplayNames[play.type] ?? play.type}</span>
+                )}
               </span>
               <span className="play-event-details">
                 {pairedCallahan !== undefined ? (
@@ -237,7 +279,7 @@ function PlayHistoryItem({
                     {' to '}
                     <strong>{formatPlayerName(play.receiver, playerNames)}</strong>
                   </>
-                ) : play.type === 'pass' ? (
+                ) : isPass ? (
                   `${formatPlayerName(play.thrower, playerNames)} to ${formatPlayerName(play.receiver, playerNames)}`
                 ) : play.type === 'throwawayByRecording' ? (
                   formatPlayerName(play.thrower, playerNames)
@@ -266,6 +308,30 @@ function PlayHistoryItem({
 function formatPlayerName(playerId: string | null, playerNames: PlayerNames) {
   if (!playerId) return '';
   return playerNames[playerId.toLowerCase()] ?? playerId;
+}
+
+function getPassVector(play: GameEvent) {
+  const { throwerX, throwerY, receiverX, receiverY } = play;
+  if (
+    throwerX === null ||
+    throwerY === null ||
+    receiverX === null ||
+    receiverY === null ||
+    ![throwerX, throwerY, receiverX, receiverY].every(Number.isFinite)
+  ) {
+    return undefined;
+  }
+
+  const deltaX = receiverX - throwerX;
+  const deltaY = receiverY - throwerY;
+  const fieldDelta = {
+    from: mapGamePositionToField({ x: throwerX, y: throwerY }),
+    to: mapGamePositionToField({ x: receiverX, y: receiverY }),
+  };
+  return {
+    angle: Math.atan2(fieldDelta.to.y - fieldDelta.from.y, fieldDelta.to.x - fieldDelta.from.x) * (180 / Math.PI),
+    distance: Math.round(Math.hypot(deltaX, deltaY)),
+  };
 }
 
 function toTitleCase(value: string) {
